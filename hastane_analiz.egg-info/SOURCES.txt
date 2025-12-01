@@ -1,0 +1,6 @@
+pyproject.toml
+hastane_analiz.egg-info/PKG-INFO
+hastane_analiz.egg-info/SOURCES.txt
+hastane_analiz.egg-info/dependency_links.txt
+hastane_analiz.egg-info/requires.txt
+hastane_analiz.egg-info/top_level.txt

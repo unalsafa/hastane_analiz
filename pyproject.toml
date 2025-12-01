@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hastane-analiz"
+version = "0.1.0"
+description = "İl Sağlık Müdürlüğü için hastane analiz ETL + ML projesi"
+authors = [
+  { name = "Safa Ünal", email = "ornek@mail.com" }
+]
+requires-python = ">=3.10"
+
+dependencies = [
+  "pandas>=2.0",
+  "openpyxl>=3.1",
+  "psycopg2-binary>=2.9",
+  "python-dotenv>=1.0",
+  "numpy>=1.26",
+  "scikit-learn>=1.4"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
