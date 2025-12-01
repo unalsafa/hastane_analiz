@@ -1,4 +1,4 @@
-from hastane_analiz.db.connection import get_connection
+ï»¿from hastane_analiz.db.connection import get_connection
 
 def main():
     try:
@@ -6,10 +6,10 @@ def main():
             with conn.cursor() as cur:
                 cur.execute("SELECT version();")
                 version = cur.fetchone()[0]
-                print("[DB] Baðlantý baþarýlý!")
-                print("[DB] PostgreSQL sürümü:", version)
+                print("[DB] Baglanti basarili!")
+                print("[DB] PostgreSQL surumu:", version)
     except Exception as e:
-        print("[DB] Baðlantý hatasý:")
+        print("[DB] Baglanti hatasi:")
         print(e)
 
 if __name__ == "__main__":

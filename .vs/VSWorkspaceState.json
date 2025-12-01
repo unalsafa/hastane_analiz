@@ -1,8 +1,16 @@
 {
   "ExpandedNodes": [
     "",
-    "\\hastane_analiz.egg-info"
+    "\\hastane_analiz",
+    "\\hastane_analiz.egg-info",
+    "\\hastane_analiz\\config",
+    "\\hastane_analiz\\db",
+    "\\hastane_analiz\\etl",
+    "\\hastane_analiz\\etl\\transformers",
+    "\\hastane_analiz\\ml",
+    "\\hastane_analiz\\scripts",
+    "\\hastane_analiz\\tests"
   ],
-  "SelectedNode": "\\hastane_analiz.slnx",
+  "SelectedNode": "\\hastane_analiz\\etl\\runner.py",
   "PreviewInSolutionExplorer": false
 }

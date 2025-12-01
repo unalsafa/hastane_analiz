@@ -1,9 +1,7 @@
 {
   "ExpandedNodes": [
     "",
-    "\\db",
-    "\\scripts"
+    "\\etl\\transformers"
   ],
-  "SelectedNode": "\\scripts\\test_db_connection.py",
   "PreviewInSolutionExplorer": false
 }

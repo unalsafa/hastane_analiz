@@ -1,16 +1,16 @@
-import os
+ï»¿import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Proje kökünü bul (pyproject.toml'un olduðu yer)
+# Proje kÃ¶kÃ¼nÃ¼ bul (pyproject.toml'un olduÄŸu yer)
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# .env dosyasýný yükle
+# .env dosyasÄ±nÄ± yÃ¼kle
 env_path = BASE_DIR / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
-# DB ayarlarý
+# DB ayarlarÄ±
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME", "hastane_analiz"),
     "user": os.getenv("DB_USER", "postgres"),
@@ -19,8 +19,8 @@ DB_CONFIG = {
     "port": int(os.getenv("DB_PORT", "5432")),
 }
 
-# Excel giriþ klasörü
+# Excel giriÅŸ klasÃ¶rÃ¼
 INPUT_FOLDER = os.getenv("INPUT_FOLDER", r"C:\veri")
 
-# Log klasörü
+# Log klasÃ¶rÃ¼
 LOG_FOLDER = os.getenv("LOG_FOLDER", str(BASE_DIR / "logs"))
