@@ -1,21 +1,9 @@
-﻿# Kimlik kolonları (transformer'lar bunları kullanacak)
-ID_COLS = [
-    "yil",
-    "ay",
-    "birim_adi",
-    "ilce_adi",
-    "baskanlik_adi",
-    "kurum_rol_adi",
-]
+﻿# hastane_analiz/etl/schema_registry.py
 
-# raw_veri tablosuna yazılan kolonlar
 RAW_VERI_COLUMNS = [
     "yil",
     "ay",
-    "birim_adi",
-    "ilce_adi",
-    "baskanlik_adi",
-    "kurum_rol_adi",
+    "kurum_kodu",
     "kategori",
     "sayfa_adi",
     "metrik_adi",
@@ -24,17 +12,22 @@ RAW_VERI_COLUMNS = [
     "kaynak_dosya",
 ]
 
+
 def get_raw_veri_insert_sql() -> str:
     """
-    raw_veri INSERT SQL'ini otomatik oluşturur.
-    Buraya kolon ekleyip cikarmak yeterli olacak.
+    raw_veri tablosu icin INSERT SQL uretilir.
+    Kolon sirasi RAW_VERI_COLUMNS ile bire bir uyumlu.
     """
-    columns = ", ".join(RAW_VERI_COLUMNS)
+    cols = ",\n            ".join(RAW_VERI_COLUMNS)
+
     placeholders = ", ".join(["%s"] * len(RAW_VERI_COLUMNS))
 
-    return f"""
+    sql = f"""
         INSERT INTO hastane_analiz.raw_veri (
-            {columns}
+            {cols}
         )
-        VALUES ({placeholders})
+        VALUES (
+            {placeholders}
+        )
     """
+    return sql.strip()

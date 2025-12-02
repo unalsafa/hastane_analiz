@@ -1,12 +1,122 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "C:\\hastane_analiz\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\runner.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\runner.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\loaders.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\loaders.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\transformers\\duzenleyen.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\transformers\\duzenleyen.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\excel_reader.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\excel_reader.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\db\\connection.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\db\\connection.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\scripts\\run_etl.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\scripts\\run_etl.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
       "VerticalTabListWidth": 256,
-      "DocumentGroups": []
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 4,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "loaders.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\loaders.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\etl\\loaders.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\etl\\loaders.py",
+              "RelativeToolTip": "hastane_analiz\\etl\\loaders.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-01T13:29:34.242Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "duzenleyen.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\transformers\\duzenleyen.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\etl\\transformers\\duzenleyen.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\etl\\transformers\\duzenleyen.py",
+              "RelativeToolTip": "hastane_analiz\\etl\\transformers\\duzenleyen.py",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-01T13:29:30.714Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "excel_reader.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\excel_reader.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\etl\\excel_reader.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\etl\\excel_reader.py",
+              "RelativeToolTip": "hastane_analiz\\etl\\excel_reader.py",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAAACYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-01T13:25:32.563Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "connection.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\db\\connection.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\db\\connection.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\db\\connection.py",
+              "RelativeToolTip": "hastane_analiz\\db\\connection.py",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAAACIAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-01T13:19:16.973Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "runner.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\runner.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\etl\\runner.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\etl\\runner.py",
+              "RelativeToolTip": "hastane_analiz\\etl\\runner.py",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAAABQAAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-01T13:16:38.365Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "run_etl.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\scripts\\run_etl.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\scripts\\run_etl.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\scripts\\run_etl.py",
+              "RelativeToolTip": "hastane_analiz\\scripts\\run_etl.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-01T13:16:00.8Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
     }
   ]
 }

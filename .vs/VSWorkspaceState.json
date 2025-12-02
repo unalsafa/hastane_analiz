@@ -11,6 +11,6 @@
     "\\hastane_analiz\\scripts",
     "\\hastane_analiz\\tests"
   ],
-  "SelectedNode": "\\hastane_analiz\\etl\\runner.py",
+  "SelectedNode": "\\hastane_analiz\\scripts\\run_etl.py",
   "PreviewInSolutionExplorer": false
 }

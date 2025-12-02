@@ -1,17 +1,18 @@
 ﻿# hastane_analiz/etl/runner.py
 
+
 from pathlib import Path
-from typing import Optional
+import pandas as pd
 
-from hastane_analiz.etl.excel_reader import read_excel_file, detect_category_from_filename
-from hastane_analiz.etl.transformers.duzenleyen import transform_duzenleyen
-from hastane_analiz.etl.loaders import insert_long_df_to_raw_veri
 from hastane_analiz.config.settings import INPUT_FOLDER
+from hastane_analiz.etl.excel_reader import read_excel_file, detect_category_from_filename
+from hastane_analiz.etl.transformers.acil import transform_acil
+from hastane_analiz.etl.loaders import insert_long_df_to_raw_veri
 
-def run_etl_for_folder(folder: Optional[str] = None):
+
+def run_etl_for_folder(folder: str | None = None) -> None:
     base = Path(folder or INPUT_FOLDER)
     excel_files = list(base.glob("*.xlsx"))
-
     print(f"[ETL] Klasor: {base} | Bulunan dosya: {len(excel_files)}")
 
     for file_path in excel_files:
@@ -20,22 +21,29 @@ def run_etl_for_folder(folder: Optional[str] = None):
 
         df = read_excel_file(file_path)
 
-        # TODO: Dosya adindan yil/ay parse edecegiz.
-        # Simdilik sabit bir deger kullanalim.
-        yil = 2024
-        ay = 2
-
+        # 1) DUZENLEYEN -> fact ETL'de tamamen atla
         if kategori == "DUZENLEYEN":
-            long_df = transform_duzenleyen(df, yil=yil, ay=ay)
-            print(f"  -> Long satir sayisi: {len(long_df)}")
+            print(
+                "  -> DUZENLEYEN dosyasi fact ETL'de atlandi. "
+                "Bu dosya icin ayri dim ETL calistiriliyor (birim_def)."
+            )
+            continue
+
+        # 2) ACIL transformer
+        if kategori == "ACIL":
+            long_df = transform_acil(df, sheet_name="ACIL")
+            print(f"  -> [ACIL] Long satir sayisi: {len(long_df)}")
+
             if len(long_df) > 0:
                 insert_long_df_to_raw_veri(
                     long_df=long_df,
                     kategori=kategori,
                     file_path=str(file_path),
+                    sayfa_adi="ACIL",
                 )
-                print("  -> raw_veri'ye insert edildi.")
+                print("  -> [ACIL] raw_veri'ye insert edildi.")
             else:
-                print("  -> Long DF bos, insert yapilmadi.")
+                print("  -> [ACIL] Long DF bos, insert yapilmadi.")
         else:
             print(f"  -> Bu kategori icin henuz transformer yok: {kategori}")
+

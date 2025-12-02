@@ -9,7 +9,7 @@ class CategoryRule:
 
 # Tüm kategoriler burada tek noktadan yönetilecek
 CATEGORY_RULES = [
-    CategoryRule(name="ACIL",         keywords=["ACIL", "AÇIL"],           id=1),
+    CategoryRule(name="ACIL",         keywords=["ACIL", "AÇIL","ACİL"],           id=1),
     CategoryRule(name="AMELIYATHANE", keywords=["AMELIYAT", "AMELİYAT"],   id=2),
     CategoryRule(name="DOGUM",        keywords=["DOGUM", "DOĞUM"],         id=3),
     CategoryRule(name="DUZENLEYEN",   keywords=["DUZENLEYEN", "DÜZENLEYEN"], id=4),
