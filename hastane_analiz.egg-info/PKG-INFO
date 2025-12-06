@@ -6,6 +6,7 @@ Author-email: Safa Ünal <ornek@mail.com>
 Requires-Python: >=3.10
 Requires-Dist: pandas>=2.0
 Requires-Dist: openpyxl>=3.1
+Requires-Dist: xlsxwriter>=3.2
 Requires-Dist: psycopg2-binary>=2.9
 Requires-Dist: python-dotenv>=1.0
 Requires-Dist: numpy>=1.26

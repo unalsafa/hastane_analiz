@@ -2,14 +2,13 @@
   "ExpandedNodes": [
     "",
     "\\hastane_analiz",
+    "\\hastane_analiz.egg-info",
     "\\hastane_analiz\\config",
     "\\hastane_analiz\\dashboard",
     "\\hastane_analiz\\db",
     "\\hastane_analiz\\etl",
     "\\hastane_analiz\\etl\\transformers",
-    "\\hastane_analiz\\ml",
-    "\\hastane_analiz\\scripts",
-    "\\hastane_analiz\\tests"
+    "\\hastane_analiz\\scripts"
   ],
   "SelectedNode": "\\hastane_analiz\\dashboard\\dashboard_acil.py",
   "PreviewInSolutionExplorer": false
