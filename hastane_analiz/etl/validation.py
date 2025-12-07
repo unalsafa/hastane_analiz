@@ -241,12 +241,18 @@ def _prev_period(yil: int, ay: int) -> tuple[int, int]:
 #  ACIL: DOSYA İÇİ HEURISTIC KURALLAR (outlier vs.)
 # ==========================================================
 
-def v_zero_while_others_positive_acil(df: pd.DataFrame) -> List[ValidationIssue]:
+def v_zero_while_others_positive(
+    df: pd.DataFrame,
+    min_positive_ratio: float = 0.7,
+    min_group_size: int = 5,
+) -> List[ValidationIssue]:
     """
     Aynı (yil, ay, metrik_adi) için kurumların büyük çoğunluğu > 0 iken
     değeri 0 veya NaN olan satırlar için WARN üretir.
 
     "Herkes yapmış, bu kurum hiç yapmamış" tipinde uyarı.
+    Tüm kategorilerde kullanılabilir, tek şart gerekli kolonların olması:
+        - yil, ay, kurum_kodu, metrik_adi, metrik_deger
     """
     issues: List[ValidationIssue] = []
     required = {"yil", "ay", "kurum_kodu", "metrik_adi", "metrik_deger"}
@@ -257,12 +263,12 @@ def v_zero_while_others_positive_acil(df: pd.DataFrame) -> List[ValidationIssue]
 
     grp = work.groupby(["yil", "ay", "metrik_adi"], dropna=False)
     for (yil, ay, metrik_adi), sub in grp:
-        if len(sub) < 5:
+        if len(sub) < min_group_size:
             continue  # çok az kurum varsa güvenilir değil
 
         total = len(sub)
         positive = (sub["metrik_deger"] > 0).sum()
-        if positive / total < 0.7:
+        if positive / total < min_positive_ratio:
             # Çoğunluk zaten 0/boş, buradan anlamlı uyarı çıkmaz
             continue
 
@@ -291,13 +297,20 @@ def v_zero_while_others_positive_acil(df: pd.DataFrame) -> List[ValidationIssue]
     return issues
 
 
-def v_high_outlier_acil(df: pd.DataFrame) -> List[ValidationIssue]:
+
+def v_high_outlier(
+    df: pd.DataFrame,
+    min_group_size: int = 10,
+    iqr_mult: float = 3.0,
+    median_mult: float = 5.0,
+) -> List[ValidationIssue]:
     """
     Aynı (yil, ay, metrik_adi) grubunda metrik_deger diğerlerine göre
     aşırı yüksekse WARN üretir.
 
-    Basit bir IQR (Q3 + 3*IQR) + medyan*5 eşiği kullanıyoruz.
-    Bu kurallar ileride ML tabanlı anomaly detection için etiket görevi görebilir.
+    Basit bir IQR (Q3 + iqr_mult*IQR) + median*median_mult eşiği kullanıyoruz.
+    Tüm kategorilerde kullanılabilir, tek şart gerekli kolonların olması:
+        - yil, ay, kurum_kodu, metrik_adi, metrik_deger
     """
     issues: List[ValidationIssue] = []
     required = {"yil", "ay", "kurum_kodu", "metrik_adi", "metrik_deger"}
@@ -312,7 +325,7 @@ def v_high_outlier_acil(df: pd.DataFrame) -> List[ValidationIssue]:
     grp = work.groupby(["yil", "ay", "metrik_adi"], dropna=False)
 
     for (yil, ay, metrik_adi), sub in grp:
-        if len(sub) < 10:
+        if len(sub) < min_group_size:
             continue  # istatistiksel anlam için minimum
 
         vals = sub["metrik_deger"]
@@ -323,8 +336,8 @@ def v_high_outlier_acil(df: pd.DataFrame) -> List[ValidationIssue]:
             continue
 
         median = vals.median()
-        threshold = q3 + 3 * iqr
-        threshold = max(threshold, median * 5)  # çok küçük metriklerde şişmesin
+        threshold = q3 + iqr_mult * iqr
+        threshold = max(threshold, median * median_mult)  # çok küçük metriklerde şişmesin
 
         outliers = sub[vals > threshold]
         for idx, row in outliers.iterrows():
@@ -628,6 +641,260 @@ def apply_boolean_change_rule_db(
 
     return issues
 
+def apply_ts_mean_rule_db(
+    rule_row: pd.Series,
+    df: pd.DataFrame,
+    file_path: str,
+    yil: int,
+    ay: int,
+    kategori: str,
+) -> List[ValidationIssue]:
+    """
+    TS_MEAN:
+      - Bu dosyadaki metrik değerlerini, raw_veri'de aynı kurum + metrik için
+        önceki aylardaki zaman serisi ortalamasıyla karşılaştırır.
+      - Kural paramları (kural_param):
+          window   = kaç ay geriye bakılacak (varsayılan 6)
+          min_obs  = minimum gözlem sayısı (varsayılan: max(3, window/2))
+          mult_hi  = ortalama + mult_hi * std üst sınırı (varsayılan 3.0)
+          mult_lo  = ortalama - mult_lo * std alt sınırı (varsayılan 0.0 → alt sınır yok)
+    """
+    issues: List[ValidationIssue] = []
+
+    required_cols = {"kurum_kodu", "metrik_adi", "metrik_deger"}
+    if not required_cols.issubset(df.columns):
+        return issues
+
+    metric_name = rule_row["metrik_yolu"]
+
+    # Bu dosyadaki ilgili metrik satırları
+    sub = df[df["metrik_adi"] == metric_name].copy()
+    if sub.empty:
+        return issues
+
+    sub["kurum_kodu"] = sub["kurum_kodu"].astype(str)
+    sub["metrik_deger"] = pd.to_numeric(sub["metrik_deger"], errors="coerce")
+    sub = sub[sub["metrik_deger"].notna()]
+    if sub.empty:
+        return issues
+
+    birim_list = sub["kurum_kodu"].dropna().unique().tolist()
+    if not birim_list:
+        return issues
+
+    # Parametreler
+    p = parse_kural_param(rule_row.get("kural_param"))
+    window = int(p.get("window", 6) or 6)
+    min_obs = int(p.get("min_obs", max(3, window // 2)))
+    mult_hi = float(p.get("mult_hi", 3.0) or 3.0)
+    mult_lo = float(p.get("mult_lo", 0.0) or 0.0)
+
+    # Önceki dönem verilerini DB'den çek (aynı kategori + sayfa + metrik)
+    sql = """
+        SELECT
+            yil,
+            ay,
+            kurum_kodu::text AS kurum_kodu,
+            metrik_deger_numeric
+        FROM hastane_analiz.raw_veri
+        WHERE kategori   = %s
+          AND sayfa_adi  = %s
+          AND metrik_adi = %s
+          AND metrik_deger_numeric IS NOT NULL
+          AND (
+                yil < %s
+             OR (yil = %s AND ay < %s)
+          )
+          AND kurum_kodu::text = ANY(%s)
+    """
+    params = (
+        kategori.upper(),
+        rule_row.get("sayfa_adi") or "ACIL",
+        metric_name,
+        yil,
+        yil,
+        ay,
+        birim_list,
+    )
+
+    with get_connection() as conn:
+        hist = pd.read_sql(sql, conn, params=params)
+
+    if hist.empty:
+        return issues
+
+    hist["kurum_kodu"] = hist["kurum_kodu"].astype(str)
+    hist = hist.sort_values(["kurum_kodu", "yil", "ay"])
+
+    sev = Severity(rule_row["severity"])
+    rule_code = f"{kategori.upper()}.{rule_row['alan_adi']}.TS_MEAN"
+
+    # Bu dosyadaki current değerler map
+    cur_map = sub.set_index("kurum_kodu")["metrik_deger"].to_dict()
+
+    for kurum, df_k in hist.groupby("kurum_kodu"):
+        vals = df_k["metrik_deger_numeric"].dropna()
+        if len(vals) < min_obs:
+            continue
+
+        # En son 'window' kadar değeri al
+        vals = vals.tail(window)
+        if vals.empty:
+            continue
+
+        mean = vals.mean()
+        std = vals.std(ddof=0)
+
+        # std = 0 ise varyans yok => anomaliyi ML tarafına bırakmak isteyebiliriz
+        if std == 0:
+            continue
+
+        cur_val = cur_map.get(kurum)
+        if cur_val is None or pd.isna(cur_val):
+            continue
+
+        cur_val = float(cur_val)
+
+        hi = mean + mult_hi * std
+        lo = mean - mult_lo * std if mult_lo > 0 else None
+
+        is_high = cur_val > hi
+        is_low = (lo is not None) and (cur_val < lo)
+
+        if not (is_high or is_low):
+            continue
+
+        direction = "yüksek" if is_high else "düşük"
+        msg = (
+            f"{kurum} için {yil}-{ay:02d} döneminde '{metric_name}' değeri "
+            f"zaman serisi ortalamasına göre olağan dışı {direction} görünüyor "
+            f"(değer={cur_val:.2f}, ort={mean:.2f}, std={std:.2f}, "
+            f"pencere={len(vals)} ay)."
+        )
+
+        issues.append(
+            ValidationIssue(
+                severity=sev,
+                rule_code=rule_code,
+                message=msg,
+                file_path=file_path,
+                kategori=kategori,
+                sayfa_adi=rule_row.get("sayfa_adi"),
+                row_index=None,
+                context={
+                    "birim_kodu": kurum,
+                    "yil": yil,
+                    "ay": ay,
+                    "window": int(len(vals)),
+                    "mean": float(mean),
+                    "std": float(std),
+                    "value": cur_val,
+                    "hi": float(hi),
+                    "lo": float(lo) if lo is not None else None,
+                    "metrik_adi": metric_name,
+                },
+            )
+        )
+
+    return issues
+
+def apply_sum_eq_rule_long(
+    rule_row: pd.Series,
+    df: pd.DataFrame,
+    file_path: str,
+    kategori: str,
+) -> List[ValidationIssue]:
+    """
+    SUM_EQ:
+      - Aynı (yil, ay, kurum_kodu) için:
+          toplam_metrik  ≈  alt_metriklerin_toplamı
+        kontrolünü yapar.
+
+      - kural_param:
+          children  = alt metriklerin metrik_yolu listesi (virgülle)
+          tolerance = mutlak tolerans (varsayılan 0.0 → tam eşitlik)
+    """
+    issues: List[ValidationIssue] = []
+
+    required = {"yil", "ay", "kurum_kodu", "metrik_adi", "metrik_deger"}
+    if not required.issubset(df.columns):
+        return issues
+
+    total_metric = rule_row["metrik_yolu"]
+    params = parse_kural_param(rule_row.get("kural_param"))
+
+    children_str = params.get("children")
+    if not children_str:
+        return issues
+
+    children = [c.strip() for c in str(children_str).split(",") if c.strip()]
+    if not children:
+        return issues
+
+    tolerance = float(params.get("tolerance", 0.0) or 0.0)
+
+    work = _ensure_numeric_copy(df)
+    work = work[work["metrik_adi"].isin([total_metric] + children)]
+    if work.empty:
+        return issues
+
+    sev = Severity(rule_row["severity"])
+    rule_code = f"{kategori.upper()}.{rule_row['alan_adi']}.SUM_EQ"
+
+    # Her kurum + dönem için kontrol
+    grp = work.groupby(["yil", "ay", "kurum_kodu"], dropna=False)
+
+    for (yil, ay, kurum), sub in grp:
+        # toplam metrik
+        total_vals = sub.loc[sub["metrik_adi"] == total_metric, "metrik_deger"].dropna()
+        if total_vals.empty:
+            continue
+        total_val = float(total_vals.iloc[0])
+
+        # alt metriklerin toplamı
+        child_vals = sub.loc[sub["metrik_adi"].isin(children), "metrik_deger"].dropna()
+        if child_vals.empty:
+            continue
+        child_sum = float(child_vals.sum())
+
+        diff = child_sum - total_val
+        if abs(diff) <= tolerance:
+            continue
+
+        msg = (
+            f"{int(yil) if pd.notna(yil) else '?'}-"
+            f"{int(ay):02d} döneminde kurum {kurum} için "
+            f"'{total_metric}' değeri ({total_val}) ile alt kalemlerin toplamı "
+            f"({child_sum}) eşit değil (fark={diff:.2f}, tolerans={tolerance})."
+        )
+
+        issues.append(
+            ValidationIssue(
+                severity=sev,
+                rule_code=rule_code,
+                message=msg,
+                file_path=file_path,
+                kategori=kategori,
+                sayfa_adi=rule_row.get("sayfa_adi"),
+                row_index=None,
+                context={
+                    "birim_kodu": kurum,
+                    "yil": int(yil) if pd.notna(yil) else None,
+                    "ay": int(ay) if pd.notna(ay) else None,
+                    "total_metric": total_metric,
+                    "total_value": total_val,
+                    "children": children,
+                    "children_sum": child_sum,
+                    "diff": diff,
+                    "tolerance": tolerance,
+                },
+            )
+        )
+
+    return issues
+
+
+
 
 def run_acil_rule_engine(
     df: pd.DataFrame,
@@ -699,8 +966,8 @@ def run_validations(
             issues += run_acil_rule_engine(df, file_path, kategori, sayfa_adi)
 
             # 4) ACIL heuristic kurallar (opsiyonel, çok uyarı üretebilir)
-            issues += v_zero_while_others_positive_acil(df)
-            issues += v_high_outlier_acil(df)
+            issues += v_zero_while_others_positive(df)
+            issues += v_high_outlier(df)
 
     # 5) Ortak metadata
     for i in issues:
