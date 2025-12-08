@@ -5,7 +5,7 @@ from hastane_analiz.db.connection import get_connection  # sende zaten var
 from psycopg2.extras import execute_batch
 
 
-EXCEL_PATH = Path(r"C:\hastane_analiz\hastane_analiz\config\valid_acil.xlsx")  # kendi yoluna göre değiştir
+EXCEL_PATH = Path(r"C:\hastane_analiz\hastane_analiz\config\valid_rules.xlsx")  # kendi yoluna göre değiştir
 
 
 def normalize_bool(val):

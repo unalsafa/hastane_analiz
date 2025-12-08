@@ -169,16 +169,17 @@ def v_high_outlier_generic(
 #  ACIL KURAL DEF (acil_kural_def) LOADER + PARAM PARSER
 # ==========================================================
 
-_acil_rules_cache: Optional[pd.DataFrame] = None
+_rules_cache: dict[str, pd.DataFrame] = {}
 
+def load_rules_by_category(kategori: str, refresh: bool = False) -> pd.DataFrame:
+    """
+    hastane_analiz.acil_kural_def tablosundaki aktif kuralları
+    verilen kategori için çeker (ACIL, DOGUM, YOGUNBAKIM vb.).
+    """
+    kategori = kategori.upper()
 
-def load_acil_rules(refresh: bool = False) -> pd.DataFrame:
-    """
-    hastane_analiz.acil_kural_def tablosundaki aktif kuralları çeker.
-    """
-    global _acil_rules_cache
-    if _acil_rules_cache is not None and not refresh:
-        return _acil_rules_cache
+    if not refresh and kategori in _rules_cache:
+        return _rules_cache[kategori]
 
     sql = """
         SELECT
@@ -196,19 +197,19 @@ def load_acil_rules(refresh: bool = False) -> pd.DataFrame:
             aciklama
         FROM hastane_analiz.acil_kural_def
         WHERE aktif_mi = TRUE
-          AND kategori = 'ACIL'
+          AND kategori = %s
     """
     with get_connection() as conn:
-        df = pd.read_sql(sql, conn)
+        df = pd.read_sql(sql, conn, params=(kategori,))
 
-    # küçük normalizasyon
     df["kural_tipi"] = df["kural_tipi"].str.upper().str.strip()
     df["severity"] = df["severity"].str.upper().str.strip()
     df["veri_tipi"] = df["veri_tipi"].str.lower().str.strip()
     df["rol"] = df["rol"].str.lower().str.strip()
 
-    _acil_rules_cache = df
+    _rules_cache[kategori] = df
     return df
+
 
 
 def parse_kural_param(param_str: Optional[str]) -> Dict[str, Any]:
@@ -565,9 +566,13 @@ def _build_allowed_checker(allowed_raw: List[str]) -> Callable[[Any], bool]:
     return is_allowed
 
 
-def apply_range_rule_long(rule_row: pd.Series,
-                          df: pd.DataFrame,
-                          file_path: str) -> List[ValidationIssue]:
+def apply_range_rule_long(
+    rule_row: pd.Series,
+    df: pd.DataFrame,
+    file_path: str,
+    kategori: str,
+    )   -> List[ValidationIssue]:
+
     """
     RANGE kuralı, long form veri için:
     - metrik_adi == rule_row['metrik_yolu'] olan satırlarda metrik_deger'e bakar.
@@ -584,7 +589,9 @@ def apply_range_rule_long(rule_row: pd.Series,
 
     params = parse_kural_param(rule_row.get("kural_param"))
     sev = Severity(rule_row["severity"])
-    rule_code = f"ACIL.{rule_row['alan_adi']}.RANGE"
+    kategori_u = kategori.upper()
+    rule_code = f"{kategori_u}.{rule_row['alan_adi']}.RANGE"
+
 
     allowed_raw = params.get("allowed")
     if allowed_raw:
@@ -606,7 +613,7 @@ def apply_range_rule_long(rule_row: pd.Series,
                     rule_code=rule_code,
                     message=msg,
                     file_path=file_path,
-                    kategori="ACIL",
+                    kategori=kategori_u,
                     sayfa_adi=rule_row.get("sayfa_adi"),
                     row_index=int(idx),
                     context={
@@ -680,6 +687,7 @@ def apply_boolean_change_rule_db(
     file_path: str,
     yil: int,
     ay: int,
+    kategori: str,
 ) -> List[ValidationIssue]:
     """
     BOOLEAN_CHANGE / CHANGE:
@@ -713,15 +721,17 @@ def apply_boolean_change_rule_db(
             kurum_kodu::text AS kurum_kodu,
             metrik_deger_numeric
         FROM hastane_analiz.raw_veri
-        WHERE kategori   = 'ACIL'
+        WHERE kategori   = %s
           AND sayfa_adi  = %s
           AND metrik_adi = %s
           AND yil        = %s
           AND ay         = %s
           AND kurum_kodu::text = ANY(%s)
     """
+    kategori_u = kategori.upper()
     params = (
-        rule_row.get("sayfa_adi") or "ACIL",
+        kategori_u,
+        rule_row.get("sayfa_adi") or kategori_u,
         metric_name,
         prev_yil,
         prev_ay,
@@ -739,7 +749,8 @@ def apply_boolean_change_rule_db(
     prev_map = dict(zip(df_prev["kurum_kodu"], df_prev["prev_value"]))
 
     sev = Severity(rule_row["severity"])
-    rule_code = f"ACIL.{rule_row['alan_adi']}.BOOLEAN_CHANGE"
+    kategori=kategori_u,
+    rule_code = f"{kategori_u}.{rule_row['alan_adi']}.BOOLEAN_CHANGE"
 
     sub["cur_value"] = _normalize_bool_series(sub["metrik_deger"])
 
@@ -1035,7 +1046,7 @@ def apply_sum_eq_rule_long(
 
 
 
-def run_rule_engine(
+def run_rule_engine_for_category(
     df: pd.DataFrame,
     file_path: str,
     kategori: str,
@@ -1046,8 +1057,8 @@ def run_rule_engine(
     """
     if kategori.upper() != "ACIL":
         return []
-
-    rules = load_acil_rules()
+    kategori_u = kategori.upper()
+    rules = load_rules_by_category()
     issues: List[ValidationIssue] = []
 
     # Aynı anda çoklu sayfa kullanırsak sayfa_adi ile filtreleyebiliriz
@@ -1064,15 +1075,15 @@ def run_rule_engine(
         cur_yil = cur_ay = None  # BOOLEAN_CHANGE çalışmaz
 
     for _, rule in rules_use.iterrows():
-        kural_tipi = (rule["kural_tipi"] or "").upper().strip()
+        kural_tipi = rule["kural_tipi"]
 
         if kural_tipi == "RANGE":
-            issues.extend(apply_range_rule_long(rule, df, file_path))
+            issues.extend(apply_range_rule_long(rule, df, file_path,kategori_u))
 
         elif kural_tipi in ("BOOLEAN_CHANGE", "CHANGE") and yil_ay_ok:
             issues.extend(
                 apply_boolean_change_rule_db(
-                    rule, df, file_path, cur_yil, cur_ay
+                    rule, df, file_path, cur_yil, cur_ay, kategori_u
                 )
             )
 
@@ -1085,20 +1096,22 @@ def run_rule_engine(
                     file_path,
                     cur_yil,
                     cur_ay,
-                    kategori,   # ACIL ama fonksiyon kategori bağımsız
+                    kategori_u,
                 )
             )
 
         elif kural_tipi == "SUM_EQ":
             # toplam metrik = alt kalemler toplamı kontrolü
             issues.extend(
-                apply_sum_eq_rule_long(
+                apply_sum_eq_rule_db(
                     rule,
                     df,
                     file_path,
-                    kategori,
+                    kategori_u,
                 )
             )
+        elif kural_tipi == "RATIO_RANGE":
+            issues.extend(apply_ratio_range_rule_db(rule, file_path))
 
 
     return issues
@@ -1128,12 +1141,12 @@ def run_validations(
         issues += v_metric_numeric(df)
 
         # 3) ACIL'e özel kural motoru (acil_kural_def)
-        if kategori.upper() == "ACIL":
-            issues += run_rule_engine(df, file_path, kategori, sayfa_adi)
+        # 3) Kural motoru (TS_MEAN, RANGE, BOOLEAN_CHANGE, SUM_EQ, RATIO_RANGE...)
+        issues += run_rule_engine_for_category(df, file_path, kategori, sayfa_adi)
 
-            # 4) ACIL heuristic kurallar (opsiyonel, çok uyarı üretebilir)
-            issues += v_zero_while_others_positive(df)
-            issues += v_high_outlier(df)
+        # 4) Heuristic kurallar (tüm kategoriler için geçerli)
+        issues += v_zero_while_others_positive(df)
+        issues += v_high_outlier(df)
 
     # 5) Ortak metadata
     for i in issues:
