@@ -219,6 +219,16 @@ def load_anomaly_details():
     """
     return read_sql(sql)
 
+@st.cache_data
+def load_ratio_anomalies():
+    sql = """
+        SELECT *
+        FROM hastane_analiz.v_kalite_ratio_detay
+        ORDER BY olusturma_zamani DESC, kalite_id DESC;
+    """
+    return read_sql(sql)
+
+
 
 
 # ---------------------------------------------------------
@@ -367,11 +377,12 @@ def main():
     with tab_kalite:
         st.subheader("Veri Kalitesi")
 
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📁 Dosya Özeti",
             "❌ Son FATAL Kayıtlar",
             "📉 Negatif Değerler",
             "📊 Anomali Detayları",
+            "📐 Oran Anomalileri",
         ])
 
 
@@ -481,6 +492,90 @@ def main():
                     st.metric("FATAL Sayısı", f"{fatal_say}")
 
                 st.markdown("---")
+
+        with tab5:
+            st.subheader("Oran Anomalileri (RATIO_*)")
+
+            df_ratio = load_ratio_anomalies()
+
+            if df_ratio.empty:
+                st.success("Şu an kayıtlı oran anomalisı bulunmuyor 🎉")
+            else:
+                # Filtreler
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    kural_list = sorted(df_ratio["kural_kodu"].unique())
+                    kural_filter = st.multiselect(
+                        "Kural Kodu",
+                        kural_list,
+                        default=kural_list,
+                    )
+
+                with col2:
+                    ilce_list = sorted(df_ratio["ilce_adi"].dropna().unique())
+                    ilce_filter = st.multiselect(
+                        "İlçe",
+                        ilce_list,
+                        default=[],
+                    )
+
+                with col3:
+                    birim_list = sorted(df_ratio["birim_adi"].dropna().unique())
+                    birim_filter = st.multiselect(
+                        "Hastane",
+                        birim_list,
+                        default=[],
+                    )
+
+                with col4:
+                    yil_list = sorted(df_ratio["yil"].dropna().unique(), reverse=True)
+                    yil_filter = st.multiselect(
+                        "Yıl",
+                        yil_list,
+                        default=[],
+                    )
+
+                df_f = df_ratio.copy()
+                if kural_filter:
+                    df_f = df_f[df_f["kural_kodu"].isin(kural_filter)]
+                if ilce_filter:
+                    df_f = df_f[df_f["ilce_adi"].isin(ilce_filter)]
+                if birim_filter:
+                    df_f = df_f[df_f["birim_adi"].isin(birim_filter)]
+                if yil_filter:
+                    df_f = df_f[df_f["yil"].isin(yil_filter)]
+
+                # Özet kartlar
+                colm1, colm2 = st.columns(2)
+                with colm1:
+                    st.metric("Toplam Oran Uyarısı", len(df_f))
+                with colm2:
+                    st.metric("Farklı Hastane Sayısı", df_f["birim_adi"].nunique())
+
+                st.markdown("---")
+
+                # Gösterilecek tablo
+                df_show = df_f[[
+                    "olusturma_zamani",
+                    "seviye",
+                    "kural_kodu",
+                    "yil",
+                    "ay",
+                    "ilce_adi",
+                    "birim_adi",
+                    "num_metrik_adi",
+                    "den_metrik_adi",
+                    "num_value",
+                    "den_value",
+                    "ratio",
+                    "min_oran",
+                    "max_oran",
+                    "mesaj",
+                    "kaynak_dosya",
+                ]].sort_values("olusturma_zamani", ascending=False)
+
+                st.dataframe(df_show, use_container_width=True)
 
                 # --- Tablo için birkaç hesaplanmış kolon ---
                 df_show = df_f.copy()

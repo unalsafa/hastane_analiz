@@ -25,6 +25,145 @@ class ValidationIssue:
     row_index: Optional[int] = None
     context: Optional[Dict[str, Any]] = None
 
+    # ==========================================================
+#  GENEL HEURISTIC KURALLAR (KATEGORİDEN BAĞIMSIZ)
+# ==========================================================
+
+def v_zero_while_others_positive_generic(
+    df: pd.DataFrame,
+    group_cols: list[str],
+    id_col: str,
+    metric_col: str = "metrik_deger",
+    min_group_size: int = 5,
+    min_positive_ratio: float = 0.7,
+    rule_code: str = "ZERO_WHILE_OTHERS_POSITIVE",
+    severity: Severity = Severity.WARN,
+) -> List[ValidationIssue]:
+    """
+    Aynı group_cols grubu içinde kurumların çoğu > 0 iken
+    0 veya NaN olan satırlar için WARN/FATAL üretir.
+
+    Örn: group_cols = ["yil","ay","metrik_adi"], id_col="kurum_kodu"
+    """
+    issues: List[ValidationIssue] = []
+
+    required = set(group_cols + [id_col, metric_col])
+    if not required.issubset(df.columns):
+        return issues
+
+    work = df.copy()
+    for gc in group_cols:
+        work[gc] = pd.to_numeric(work[gc], errors="ignore")
+
+    work[metric_col] = pd.to_numeric(work[metric_col], errors="coerce")
+
+    grp = work.groupby(group_cols, dropna=False)
+
+    for key, sub in grp:
+        if len(sub) < min_group_size:
+            continue
+
+        total = len(sub)
+        positive = (sub[metric_col] > 0).sum()
+
+        # Çoğunluk zaten 0/NaN ise anlamlı değil
+        if total == 0 or positive / total < min_positive_ratio:
+            continue
+
+        zeros = sub[sub[metric_col].isna() | (sub[metric_col] == 0)]
+        for idx, row in zeros.iterrows():
+            msg = (
+                f"Aynı grup {group_cols} içinde kurumların {positive}/{total} tanesinde "
+                f"{metric_col} > 0 iken bu satırda değer 0 veya boş."
+            )
+            issues.append(
+                ValidationIssue(
+                    severity=severity,
+                    rule_code=rule_code,
+                    message=msg,
+                    row_index=int(idx),
+                    context={
+                        "group_key": key if isinstance(key, tuple) else (key,),
+                        id_col: row.get(id_col),
+                        metric_col: None,
+                    },
+                )
+            )
+
+    return issues
+
+
+def v_high_outlier_generic(
+    df: pd.DataFrame,
+    group_cols: list[str],
+    id_col: str,
+    metric_col: str = "metrik_deger",
+    min_group_size: int = 10,
+    iqr_factor: float = 3.0,
+    median_factor: float = 5.0,
+    rule_code: str = "METRIC_OUTLIER_HIGH",
+    severity: Severity = Severity.WARN,
+) -> List[ValidationIssue]:
+    """
+    Aynı group_cols içinde metric_col değeri diğerlerine göre aşırı yüksekse
+    WARN/FATAL üretir. IQR + median tabanlı eşik kullanır.
+    """
+    issues: List[ValidationIssue] = []
+
+    required = set(group_cols + [id_col, metric_col])
+    if not required.issubset(df.columns):
+        return issues
+
+    work = df.copy()
+    work[metric_col] = pd.to_numeric(work[metric_col], errors="coerce")
+    work = work[work[metric_col].notna()]
+    if work.empty:
+        return issues
+
+    grp = work.groupby(group_cols, dropna=False)
+
+    for key, sub in grp:
+        if len(sub) < min_group_size:
+            continue
+
+        vals = sub[metric_col]
+        q1 = vals.quantile(0.25)
+        q3 = vals.quantile(0.75)
+        iqr = q3 - q1
+        if iqr <= 0:
+            continue
+
+        median = vals.median()
+        threshold = q3 + iqr_factor * iqr
+        threshold = max(threshold, median * median_factor)
+
+        outliers = sub[vals > threshold]
+        for idx, row in outliers.iterrows():
+            val = float(row[metric_col])
+            msg = (
+                f"Aynı grup {group_cols} içindeki diğer değerlere göre bu satırın "
+                f"{metric_col} değeri ({val}) olağan dışı derecede yüksek görünüyor."
+            )
+            issues.append(
+                ValidationIssue(
+                    severity=severity,
+                    rule_code=rule_code,
+                    message=msg,
+                    row_index=int(idx),
+                    context={
+                        "group_key": key if isinstance(key, tuple) else (key,),
+                        id_col: row.get(id_col),
+                        metric_col: val,
+                        "q1": float(q1),
+                        "q3": float(q3),
+                        "median": float(median),
+                        "threshold": float(threshold),
+                    },
+                )
+            )
+
+    return issues
+
 
 # ==========================================================
 #  ACIL KURAL DEF (acil_kural_def) LOADER + PARAM PARSER
@@ -126,7 +265,7 @@ def v_year_month_range(
     year_col: str = "yil",
     month_col: str = "ay",
     min_year: int = 2015,
-    max_year: int = 2035,
+    max_year: int = 2026,
 ) -> List[ValidationIssue]:
     issues: List[ValidationIssue] = []
 
@@ -896,7 +1035,7 @@ def apply_sum_eq_rule_long(
 
 
 
-def run_acil_rule_engine(
+def run_rule_engine(
     df: pd.DataFrame,
     file_path: str,
     kategori: str,
@@ -925,15 +1064,42 @@ def run_acil_rule_engine(
         cur_yil = cur_ay = None  # BOOLEAN_CHANGE çalışmaz
 
     for _, rule in rules_use.iterrows():
-        kural_tipi = rule["kural_tipi"]
+        kural_tipi = (rule["kural_tipi"] or "").upper().strip()
 
         if kural_tipi == "RANGE":
             issues.extend(apply_range_rule_long(rule, df, file_path))
 
         elif kural_tipi in ("BOOLEAN_CHANGE", "CHANGE") and yil_ay_ok:
-            issues.extend(apply_boolean_change_rule_db(rule, df, file_path, cur_yil, cur_ay))
+            issues.extend(
+                apply_boolean_change_rule_db(
+                    rule, df, file_path, cur_yil, cur_ay
+                )
+            )
 
-        # ileride: TS_MEAN, SUM_EQ vb. burada ele alınacak
+        elif kural_tipi == "TS_MEAN" and yil_ay_ok:
+            # zaman serisi ortalamasına göre sapma
+            issues.extend(
+                apply_ts_mean_rule_db(
+                    rule,
+                    df,
+                    file_path,
+                    cur_yil,
+                    cur_ay,
+                    kategori,   # ACIL ama fonksiyon kategori bağımsız
+                )
+            )
+
+        elif kural_tipi == "SUM_EQ":
+            # toplam metrik = alt kalemler toplamı kontrolü
+            issues.extend(
+                apply_sum_eq_rule_long(
+                    rule,
+                    df,
+                    file_path,
+                    kategori,
+                )
+            )
+
 
     return issues
 
@@ -963,7 +1129,7 @@ def run_validations(
 
         # 3) ACIL'e özel kural motoru (acil_kural_def)
         if kategori.upper() == "ACIL":
-            issues += run_acil_rule_engine(df, file_path, kategori, sayfa_adi)
+            issues += run_rule_engine(df, file_path, kategori, sayfa_adi)
 
             # 4) ACIL heuristic kurallar (opsiyonel, çok uyarı üretebilir)
             issues += v_zero_while_others_positive(df)

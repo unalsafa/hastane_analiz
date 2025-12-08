@@ -10,6 +10,6 @@
     "\\hastane_analiz\\etl\\transformers",
     "\\hastane_analiz\\scripts"
   ],
-  "SelectedNode": "\\hastane_analiz\\etl\\validation.py",
+  "SelectedNode": "\\hastane_analiz\\etl\\transformers\\acil.py",
   "PreviewInSolutionExplorer": false
 }

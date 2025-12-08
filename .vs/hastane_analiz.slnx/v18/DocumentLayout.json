@@ -3,8 +3,28 @@
   "WorkspaceRootPath": "C:\\hastane_analiz\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\transformers\\acil.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\transformers\\acil.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\dashboard\\dashboard_acil.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\dashboard\\dashboard_acil.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\validation.py||{8B382828-6202-11D1-8870-0000F87579D2}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\validation.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\ratio_rules.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\ratio_rules.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\scripts\\load_ratio_rules.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\scripts\\load_ratio_rules.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\scripts\\load_acil_rules.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\scripts\\load_acil_rules.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\runner.py||{8B382828-6202-11D1-8870-0000F87579D2}",
@@ -13,14 +33,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\scripts\\run_etl.py||{8B382828-6202-11D1-8870-0000F87579D2}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\scripts\\run_etl.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\dashboard\\dashboard_acil.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\dashboard\\dashboard_acil.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\hastane_analiz\\hastane_analiz\\etl\\transformers\\acil.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:hastane_analiz\\etl\\transformers\\acil.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,11 +42,50 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
+              "Title": "ratio_rules.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\ratio_rules.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\etl\\ratio_rules.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\etl\\ratio_rules.py",
+              "RelativeToolTip": "hastane_analiz\\etl\\ratio_rules.py",
+              "ViewState": "AgIAAHQAAAAAAAAAAAAqwIYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-08T09:41:22.215Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "load_acil_rules.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\scripts\\load_acil_rules.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\scripts\\load_acil_rules.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\scripts\\load_acil_rules.py",
+              "RelativeToolTip": "hastane_analiz\\scripts\\load_acil_rules.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAABMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-08T09:25:17.63Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "load_ratio_rules.py",
+              "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\scripts\\load_ratio_rules.py",
+              "RelativeDocumentMoniker": "hastane_analiz\\scripts\\load_ratio_rules.py",
+              "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\scripts\\load_ratio_rules.py",
+              "RelativeToolTip": "hastane_analiz\\scripts\\load_ratio_rules.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-08T09:23:48.144Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
               "Title": "runner.py",
               "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\runner.py",
               "RelativeDocumentMoniker": "hastane_analiz\\etl\\runner.py",
@@ -47,7 +98,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 7,
               "Title": "run_etl.py",
               "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\scripts\\run_etl.py",
               "RelativeDocumentMoniker": "hastane_analiz\\scripts\\run_etl.py",
@@ -55,25 +106,24 @@
               "RelativeToolTip": "hastane_analiz\\scripts\\run_etl.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-07T18:50:22.616Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T18:50:22.616Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 1,
               "Title": "dashboard_acil.py",
               "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\dashboard\\dashboard_acil.py",
               "RelativeDocumentMoniker": "hastane_analiz\\dashboard\\dashboard_acil.py",
               "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\dashboard\\dashboard_acil.py",
               "RelativeToolTip": "hastane_analiz\\dashboard\\dashboard_acil.py",
-              "ViewState": "AgIAANAAAAAAAAAAAAAqwNwAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAFACAAAAAAAAAAAAAIkBAAARAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
               "WhenOpened": "2025-12-06T10:30:08.785Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 0,
               "Title": "acil.py",
               "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\transformers\\acil.py",
               "RelativeDocumentMoniker": "hastane_analiz\\etl\\transformers\\acil.py",
@@ -81,17 +131,18 @@
               "RelativeToolTip": "hastane_analiz\\etl\\transformers\\acil.py",
               "ViewState": "AgIAACEAAAAAAAAAAAAAADMAAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-06T06:11:18.538Z"
+              "WhenOpened": "2025-12-06T06:11:18.538Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 2,
               "Title": "validation.py",
               "DocumentMoniker": "C:\\hastane_analiz\\hastane_analiz\\etl\\validation.py",
               "RelativeDocumentMoniker": "hastane_analiz\\etl\\validation.py",
               "ToolTip": "C:\\hastane_analiz\\hastane_analiz\\etl\\validation.py",
               "RelativeToolTip": "hastane_analiz\\etl\\validation.py",
-              "ViewState": "AgIAAIQDAAAAAAAAAAAqwI4DAAAdAAAAAAAAAA==",
+              "ViewState": "AgIAABgAAAAAAAAAAAAqwCIAAAAQAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
               "WhenOpened": "2025-12-04T13:51:59.812Z",
               "EditorCaption": ""
