@@ -10,6 +10,6 @@
     "\\hastane_analiz\\etl\\transformers",
     "\\hastane_analiz\\scripts"
   ],
-  "SelectedNode": "\\hastane_analiz\\scripts\\load_rules_from_excel.py",
+  "SelectedNode": "\\hastane_analiz\\etl\\transformers\\acil.py",
   "PreviewInSolutionExplorer": false
 }

@@ -25,7 +25,7 @@ class ValidationIssue:
     row_index: Optional[int] = None
     context: Optional[Dict[str, Any]] = None
 
-    # ==========================================================
+# ==========================================================
 #  GENEL HEURISTIC KURALLAR (KATEGORİDEN BAĞIMSIZ)
 # ==========================================================
 
@@ -377,136 +377,6 @@ def _prev_period(yil: int, ay: int) -> tuple[int, int]:
     return yil - 1, 12
 
 
-# ==========================================================
-#  ACIL: DOSYA İÇİ HEURISTIC KURALLAR (outlier vs.)
-# ==========================================================
-
-def v_zero_while_others_positive(
-    df: pd.DataFrame,
-    min_positive_ratio: float = 0.7,
-    min_group_size: int = 5,
-) -> List[ValidationIssue]:
-    """
-    Aynı (yil, ay, metrik_adi) için kurumların büyük çoğunluğu > 0 iken
-    değeri 0 veya NaN olan satırlar için WARN üretir.
-
-    "Herkes yapmış, bu kurum hiç yapmamış" tipinde uyarı.
-    Tüm kategorilerde kullanılabilir, tek şart gerekli kolonların olması:
-        - yil, ay, kurum_kodu, metrik_adi, metrik_deger
-    """
-    issues: List[ValidationIssue] = []
-    required = {"yil", "ay", "kurum_kodu", "metrik_adi", "metrik_deger"}
-    if not required.issubset(df.columns):
-        return issues
-
-    work = _ensure_numeric_copy(df)
-
-    grp = work.groupby(["yil", "ay", "metrik_adi"], dropna=False)
-    for (yil, ay, metrik_adi), sub in grp:
-        if len(sub) < min_group_size:
-            continue  # çok az kurum varsa güvenilir değil
-
-        total = len(sub)
-        positive = (sub["metrik_deger"] > 0).sum()
-        if positive / total < min_positive_ratio:
-            # Çoğunluk zaten 0/boş, buradan anlamlı uyarı çıkmaz
-            continue
-
-        zeros = sub[(sub["metrik_deger"].isna()) | (sub["metrik_deger"] == 0)]
-        for idx, row in zeros.iterrows():
-            msg = (
-                f"Aynı dönem ve metrikte kurumların {positive}/{total} tanesinde "
-                f"değer > 0 iken bu satırda değer 0 veya boş."
-            )
-            issues.append(
-                ValidationIssue(
-                    severity=Severity.WARN,
-                    rule_code="ZERO_WHILE_OTHERS_POSITIVE",
-                    message=msg,
-                    row_index=int(idx),
-                    context={
-                        "yil": int(yil) if pd.notna(yil) else None,
-                        "ay": int(ay) if pd.notna(ay) else None,
-                        "kurum_kodu": row.get("kurum_kodu"),
-                        "metrik_adi": row.get("metrik_adi"),
-                        "metrik_deger": None,
-                    },
-                )
-            )
-
-    return issues
-
-
-
-def v_high_outlier(
-    df: pd.DataFrame,
-    min_group_size: int = 10,
-    iqr_mult: float = 3.0,
-    median_mult: float = 5.0,
-) -> List[ValidationIssue]:
-    """
-    Aynı (yil, ay, metrik_adi) grubunda metrik_deger diğerlerine göre
-    aşırı yüksekse WARN üretir.
-
-    Basit bir IQR (Q3 + iqr_mult*IQR) + median*median_mult eşiği kullanıyoruz.
-    Tüm kategorilerde kullanılabilir, tek şart gerekli kolonların olması:
-        - yil, ay, kurum_kodu, metrik_adi, metrik_deger
-    """
-    issues: List[ValidationIssue] = []
-    required = {"yil", "ay", "kurum_kodu", "metrik_adi", "metrik_deger"}
-    if not required.issubset(df.columns):
-        return issues
-
-    work = _ensure_numeric_copy(df)
-    work = work[work["metrik_deger"].notna()]
-    if work.empty:
-        return issues
-
-    grp = work.groupby(["yil", "ay", "metrik_adi"], dropna=False)
-
-    for (yil, ay, metrik_adi), sub in grp:
-        if len(sub) < min_group_size:
-            continue  # istatistiksel anlam için minimum
-
-        vals = sub["metrik_deger"]
-        q1 = vals.quantile(0.25)
-        q3 = vals.quantile(0.75)
-        iqr = q3 - q1
-        if iqr <= 0:
-            continue
-
-        median = vals.median()
-        threshold = q3 + iqr_mult * iqr
-        threshold = max(threshold, median * median_mult)  # çok küçük metriklerde şişmesin
-
-        outliers = sub[vals > threshold]
-        for idx, row in outliers.iterrows():
-            val = float(row["metrik_deger"])
-            msg = (
-                f"Aynı dönem ve metrikteki diğer değerlere göre bu satırın değeri "
-                f"({val}) olağan dışı derecede yüksek görünüyor."
-            )
-            issues.append(
-                ValidationIssue(
-                    severity=Severity.WARN,
-                    rule_code="METRIC_OUTLIER_HIGH",
-                    message=msg,
-                    row_index=int(idx),
-                    context={
-                        "yil": int(yil) if pd.notna(yil) else None,
-                        "ay": int(ay) if pd.notna(ay) else None,
-                        "kurum_kodu": row.get("kurum_kodu"),
-                        "metrik_adi": row.get("metrik_adi"),
-                        "metrik_deger": val,
-                        "q1": float(q1),
-                        "q3": float(q3),
-                        "median": float(median),
-                        "threshold": float(threshold),
-                    },
-                )
-            )
-
-    return issues
 
 
 # ==========================================================
@@ -571,8 +441,7 @@ def apply_range_rule_long(
     df: pd.DataFrame,
     file_path: str,
     kategori: str,
-    )   -> List[ValidationIssue]:
-
+) -> List[ValidationIssue]:
     """
     RANGE kuralı, long form veri için:
     - metrik_adi == rule_row['metrik_yolu'] olan satırlarda metrik_deger'e bakar.
@@ -592,10 +461,9 @@ def apply_range_rule_long(
     kategori_u = kategori.upper()
     rule_code = f"{kategori_u}.{rule_row['alan_adi']}.RANGE"
 
-
+    # --- allowed set modu ---
     allowed_raw = params.get("allowed")
     if allowed_raw:
-        # allowed=0,1 → hem 0 / 1 / 0.0 / "0" / "1" hepsini aynı gör
         is_allowed = _build_allowed_checker(allowed_raw)
 
         for idx, row in sub.iterrows():
@@ -625,7 +493,7 @@ def apply_range_rule_long(
             )
         return issues
 
-    # allowed yoksa min/max moduna geç
+    # --- min/max modu ---
     ser_num = pd.to_numeric(sub["metrik_deger"], errors="coerce")
     min_v = params.get("min")
     max_v = params.get("max")
@@ -643,7 +511,7 @@ def apply_range_rule_long(
                     rule_code=rule_code,
                     message=msg,
                     file_path=file_path,
-                    kategori="ACIL",
+                    kategori=kategori_u,
                     sayfa_adi=rule_row.get("sayfa_adi"),
                     row_index=int(idx),
                     context={
@@ -667,7 +535,7 @@ def apply_range_rule_long(
                     rule_code=rule_code,
                     message=msg,
                     file_path=file_path,
-                    kategori="ACIL",
+                    kategori=kategori_u,
                     sayfa_adi=rule_row.get("sayfa_adi"),
                     row_index=int(idx),
                     context={
@@ -689,11 +557,6 @@ def apply_boolean_change_rule_db(
     ay: int,
     kategori: str,
 ) -> List[ValidationIssue]:
-    """
-    BOOLEAN_CHANGE / CHANGE:
-    - Bu dosyadaki değerleri, raw_veri'de bir önceki aya ait değerlerle kıyaslar.
-    - long form: metrik_adi == rule_row['metrik_yolu'], metrik_deger -> bool
-    """
     issues: List[ValidationIssue] = []
 
     required_cols = {"kurum_kodu", "metrik_adi", "metrik_deger"}
@@ -705,15 +568,14 @@ def apply_boolean_change_rule_db(
     if sub.empty:
         return issues
 
-    # Bu dosyada geçen birimler
     sub["kurum_kodu"] = sub["kurum_kodu"].astype(str)
     birim_list = sub["kurum_kodu"].dropna().unique().tolist()
     if not birim_list:
         return issues
 
     prev_yil, prev_ay = _prev_period(yil, ay)
+    kategori_u = kategori.upper()
 
-    # DB'den önceki ayın değerleri
     sql = """
         SELECT
             yil,
@@ -728,7 +590,6 @@ def apply_boolean_change_rule_db(
           AND ay         = %s
           AND kurum_kodu::text = ANY(%s)
     """
-    kategori_u = kategori.upper()
     params = (
         kategori_u,
         rule_row.get("sayfa_adi") or kategori_u,
@@ -749,7 +610,6 @@ def apply_boolean_change_rule_db(
     prev_map = dict(zip(df_prev["kurum_kodu"], df_prev["prev_value"]))
 
     sev = Severity(rule_row["severity"])
-    kategori=kategori_u,
     rule_code = f"{kategori_u}.{rule_row['alan_adi']}.BOOLEAN_CHANGE"
 
     sub["cur_value"] = _normalize_bool_series(sub["metrik_deger"])
@@ -759,7 +619,7 @@ def apply_boolean_change_rule_db(
         cur = int(row["cur_value"])
         prev = prev_map.get(kurum)
         if prev is None:
-            continue  # önceki ayda kayıt yoksa şimdilik sessiz geçiyoruz
+            continue
 
         if cur != int(prev):
             msg = (
@@ -773,7 +633,7 @@ def apply_boolean_change_rule_db(
                     rule_code=rule_code,
                     message=msg,
                     file_path=file_path,
-                    kategori="ACIL",
+                    kategori=kategori_u,
                     sayfa_adi=rule_row.get("sayfa_adi"),
                     row_index=int(idx),
                     context={
@@ -791,257 +651,168 @@ def apply_boolean_change_rule_db(
 
     return issues
 
-def apply_ts_mean_rule_db(
-    rule_row: pd.Series,
-    df: pd.DataFrame,
-    file_path: str,
-    yil: int,
-    ay: int,
-    kategori: str,
-) -> List[ValidationIssue]:
+
+def apply_ts_mean_rule(rule_row, df, file_path):
     """
-    TS_MEAN:
-      - Bu dosyadaki metrik değerlerini, raw_veri'de aynı kurum + metrik için
-        önceki aylardaki zaman serisi ortalamasıyla karşılaştırır.
-      - Kural paramları (kural_param):
-          window   = kaç ay geriye bakılacak (varsayılan 6)
-          min_obs  = minimum gözlem sayısı (varsayılan: max(3, window/2))
-          mult_hi  = ortalama + mult_hi * std üst sınırı (varsayılan 3.0)
-          mult_lo  = ortalama - mult_lo * std alt sınırı (varsayılan 0.0 → alt sınır yok)
+    TS_MEAN: Geçmiş X ayın ortalaması ile karşılaştırma.
+
+    Gerekli kural_param:
+        window=<int>
     """
-    issues: List[ValidationIssue] = []
+    issues = []
 
-    required_cols = {"kurum_kodu", "metrik_adi", "metrik_deger"}
-    if not required_cols.issubset(df.columns):
+    metric = rule_row["metrik_yolu"]
+    sev = Severity(rule_row["severity"])
+    sayfa_adi = rule_row.get("sayfa_adi") or None
+
+    params = parse_kural_param(rule_row.get("kural_param"))
+    window = int(params.get("window", 6))
+
+    # Bu dosyadaki metrik subseti
+    cur = df[df["metrik_adi"] == metric].copy()
+    if cur.empty:
         return issues
 
-    metric_name = rule_row["metrik_yolu"]
-
-    # Bu dosyadaki ilgili metrik satırları
-    sub = df[df["metrik_adi"] == metric_name].copy()
-    if sub.empty:
+    # Dönemi bul
+    period = _infer_period_from_df(df)
+    if period is None:
         return issues
 
-    sub["kurum_kodu"] = sub["kurum_kodu"].astype(str)
-    sub["metrik_deger"] = pd.to_numeric(sub["metrik_deger"], errors="coerce")
-    sub = sub[sub["metrik_deger"].notna()]
-    if sub.empty:
-        return issues
+    yil, ay = period
 
-    birim_list = sub["kurum_kodu"].dropna().unique().tolist()
-    if not birim_list:
-        return issues
-
-    # Parametreler
-    p = parse_kural_param(rule_row.get("kural_param"))
-    window = int(p.get("window", 6) or 6)
-    min_obs = int(p.get("min_obs", max(3, window // 2)))
-    mult_hi = float(p.get("mult_hi", 3.0) or 3.0)
-    mult_lo = float(p.get("mult_lo", 0.0) or 0.0)
-
-    # Önceki dönem verilerini DB'den çek (aynı kategori + sayfa + metrik)
+    # --- DB'den geçmiş X ayı çek ---
     sql = """
-        SELECT
-            yil,
-            ay,
-            kurum_kodu::text AS kurum_kodu,
-            metrik_deger_numeric
+        SELECT yil, ay, kurum_kodu::text AS kurum_kodu, metrik_deger_numeric
         FROM hastane_analiz.raw_veri
-        WHERE kategori   = %s
-          AND sayfa_adi  = %s
-          AND metrik_adi = %s
-          AND metrik_deger_numeric IS NOT NULL
-          AND (
-                yil < %s
-             OR (yil = %s AND ay < %s)
-          )
-          AND kurum_kodu::text = ANY(%s)
+        WHERE metrik_adi = %s
+          AND kategori = %s
+          AND sayfa_adi = %s
+          AND (yil * 12 + ay) < (%s * 12 + %s)
+        ORDER BY yil DESC, ay DESC
+        LIMIT %s;
     """
-    params = (
-        kategori.upper(),
-        rule_row.get("sayfa_adi") or "ACIL",
-        metric_name,
-        yil,
-        yil,
-        ay,
-        birim_list,
+    params_sql = (
+        metric,
+        rule_row["kategori"],
+        sayfa_adi,
+        yil, ay,
+        window,
     )
 
     with get_connection() as conn:
-        hist = pd.read_sql(sql, conn, params=params)
+        prev_df = pd.read_sql(sql, conn, params=params_sql)
 
-    if hist.empty:
+    if prev_df.empty:
         return issues
 
-    hist["kurum_kodu"] = hist["kurum_kodu"].astype(str)
-    hist = hist.sort_values(["kurum_kodu", "yil", "ay"])
+    prev_df["kurum_kodu"] = prev_df["kurum_kodu"].astype(str)
+    prev_df["val"] = pd.to_numeric(prev_df["metrik_deger_numeric"], errors="coerce")
+    means = prev_df.groupby("kurum_kodu")["val"].mean().to_dict()
 
-    sev = Severity(rule_row["severity"])
-    rule_code = f"{kategori.upper()}.{rule_row['alan_adi']}.TS_MEAN"
+    for idx, row in cur.iterrows():
+        kurum = str(row["kurum_kodu"])
+        cur_val = row["metrik_deger"]
+        prev_mean = means.get(kurum)
 
-    # Bu dosyadaki current değerler map
-    cur_map = sub.set_index("kurum_kodu")["metrik_deger"].to_dict()
-
-    for kurum, df_k in hist.groupby("kurum_kodu"):
-        vals = df_k["metrik_deger_numeric"].dropna()
-        if len(vals) < min_obs:
+        if prev_mean is None:
             continue
 
-        # En son 'window' kadar değeri al
-        vals = vals.tail(window)
-        if vals.empty:
-            continue
+        # oran ≈ mevcut değerin 6 aylık ortalamaya göre farkı
+        if prev_mean > 0:
+            change_ratio = cur_val / prev_mean
+        else:
+            change_ratio = None
 
-        mean = vals.mean()
-        std = vals.std(ddof=0)
-
-        # std = 0 ise varyans yok => anomaliyi ML tarafına bırakmak isteyebiliriz
-        if std == 0:
-            continue
-
-        cur_val = cur_map.get(kurum)
-        if cur_val is None or pd.isna(cur_val):
-            continue
-
-        cur_val = float(cur_val)
-
-        hi = mean + mult_hi * std
-        lo = mean - mult_lo * std if mult_lo > 0 else None
-
-        is_high = cur_val > hi
-        is_low = (lo is not None) and (cur_val < lo)
-
-        if not (is_high or is_low):
-            continue
-
-        direction = "yüksek" if is_high else "düşük"
-        msg = (
-            f"{kurum} için {yil}-{ay:02d} döneminde '{metric_name}' değeri "
-            f"zaman serisi ortalamasına göre olağan dışı {direction} görünüyor "
-            f"(değer={cur_val:.2f}, ort={mean:.2f}, std={std:.2f}, "
-            f"pencere={len(vals)} ay)."
-        )
-
-        issues.append(
-            ValidationIssue(
-                severity=sev,
-                rule_code=rule_code,
-                message=msg,
-                file_path=file_path,
-                kategori=kategori,
-                sayfa_adi=rule_row.get("sayfa_adi"),
-                row_index=None,
-                context={
-                    "birim_kodu": kurum,
-                    "yil": yil,
-                    "ay": ay,
-                    "window": int(len(vals)),
-                    "mean": float(mean),
-                    "std": float(std),
-                    "value": cur_val,
-                    "hi": float(hi),
-                    "lo": float(lo) if lo is not None else None,
-                    "metrik_adi": metric_name,
-                },
+        # Eşik: çok gevşek
+        if change_ratio is not None and (change_ratio > 3 or change_ratio < 0.25):
+            msg = (
+                f"{rule_row['gosterim_adi']} değeri geçmiş {window} ay ortalamasından "
+                f"anlamlı derecede sapmış görünüyor: "
+                f"mevcut={cur_val}, ortalama={prev_mean:.1f}, oran={change_ratio:.2f}"
             )
-        )
+            issues.append(
+                ValidationIssue(
+                    severity=sev,
+                    rule_code=f"TS_MEAN.{rule_row['alan_adi']}",
+                    message=msg,
+                    file_path=file_path,
+                    kategori=rule_row["kategori"],
+                    sayfa_adi=sayfa_adi,
+                    row_index=int(idx),
+                    context={
+                        "cur_val": cur_val,
+                        "prev_mean": prev_mean,
+                        "ratio": change_ratio,
+                    },
+                )
+            )
 
     return issues
 
-def apply_sum_eq_rule_long(
-    rule_row: pd.Series,
-    df: pd.DataFrame,
-    file_path: str,
-    kategori: str,
-) -> List[ValidationIssue]:
+
+def apply_sum_eq_rule(rule_row, df, file_path):
     """
-    SUM_EQ:
-      - Aynı (yil, ay, kurum_kodu) için:
-          toplam_metrik  ≈  alt_metriklerin_toplamı
-        kontrolünü yapar.
+    SUM_EQ: alt metriklerin toplamı bir hedef metriğe eşit olmalı.
 
-      - kural_param:
-          children  = alt metriklerin metrik_yolu listesi (virgülle)
-          tolerance = mutlak tolerans (varsayılan 0.0 → tam eşitlik)
+    kural_param:
+        group = m1,m2,m3
+        target = toplam_metrik_adi
     """
-    issues: List[ValidationIssue] = []
-
-    required = {"yil", "ay", "kurum_kodu", "metrik_adi", "metrik_deger"}
-    if not required.issubset(df.columns):
-        return issues
-
-    total_metric = rule_row["metrik_yolu"]
-    params = parse_kural_param(rule_row.get("kural_param"))
-
-    children_str = params.get("children")
-    if not children_str:
-        return issues
-
-    children = [c.strip() for c in str(children_str).split(",") if c.strip()]
-    if not children:
-        return issues
-
-    tolerance = float(params.get("tolerance", 0.0) or 0.0)
-
-    work = _ensure_numeric_copy(df)
-    work = work[work["metrik_adi"].isin([total_metric] + children)]
-    if work.empty:
-        return issues
+    issues = []
 
     sev = Severity(rule_row["severity"])
-    rule_code = f"{kategori.upper()}.{rule_row['alan_adi']}.SUM_EQ"
+    params = parse_kural_param(rule_row["kural_param"])
 
-    # Her kurum + dönem için kontrol
-    grp = work.groupby(["yil", "ay", "kurum_kodu"], dropna=False)
+    group_metrics = params.get("group")
+    target_metric = params.get("target")
 
-    for (yil, ay, kurum), sub in grp:
-        # toplam metrik
-        total_vals = sub.loc[sub["metrik_adi"] == total_metric, "metrik_deger"].dropna()
-        if total_vals.empty:
+    if not group_metrics or not target_metric:
+        return issues
+
+    group_list = [g.strip() for g in group_metrics.split(",")]
+
+    # alt metrikler
+    df_group = df[df["metrik_adi"].isin(group_list)].copy()
+    df_target = df[df["metrik_adi"] == target_metric].copy()
+
+    if df_group.empty or df_target.empty:
+        return issues
+
+    # kurum bazında grup toplamı
+    gsum = df_group.groupby("kurum_kodu")["metrik_deger"].sum().to_dict()
+
+    for idx, row in df_target.iterrows():
+        kurum = row["kurum_kodu"]
+        target_val = row["metrik_deger"]
+        g_total = gsum.get(kurum)
+
+        if g_total is None:
             continue
-        total_val = float(total_vals.iloc[0])
 
-        # alt metriklerin toplamı
-        child_vals = sub.loc[sub["metrik_adi"].isin(children), "metrik_deger"].dropna()
-        if child_vals.empty:
-            continue
-        child_sum = float(child_vals.sum())
-
-        diff = child_sum - total_val
-        if abs(diff) <= tolerance:
-            continue
-
-        msg = (
-            f"{int(yil) if pd.notna(yil) else '?'}-"
-            f"{int(ay):02d} döneminde kurum {kurum} için "
-            f"'{total_metric}' değeri ({total_val}) ile alt kalemlerin toplamı "
-            f"({child_sum}) eşit değil (fark={diff:.2f}, tolerans={tolerance})."
-        )
-
-        issues.append(
-            ValidationIssue(
-                severity=sev,
-                rule_code=rule_code,
-                message=msg,
-                file_path=file_path,
-                kategori=kategori,
-                sayfa_adi=rule_row.get("sayfa_adi"),
-                row_index=None,
-                context={
-                    "birim_kodu": kurum,
-                    "yil": int(yil) if pd.notna(yil) else None,
-                    "ay": int(ay) if pd.notna(ay) else None,
-                    "total_metric": total_metric,
-                    "total_value": total_val,
-                    "children": children,
-                    "children_sum": child_sum,
-                    "diff": diff,
-                    "tolerance": tolerance,
-                },
+        if abs(g_total - target_val) > 0.01:
+            msg = (
+                f"{target_metric} değeri ({target_val}), alt metriklerin toplamına ({g_total}) eşit değil."
             )
-        )
+
+            issues.append(
+                ValidationIssue(
+                    severity=sev,
+                    rule_code=f"SUM_EQ.{rule_row['alan_adi']}",
+                    message=msg,
+                    file_path=file_path,
+                    kategori=rule_row["kategori"],
+                    sayfa_adi=rule_row.get("sayfa_adi"),
+                    row_index=int(idx),
+                    context={
+                        "target": target_val,
+                        "group_total": g_total,
+                        "group_metrics": group_list,
+                    },
+                )
+            )
 
     return issues
+
 
 
 
@@ -1053,68 +824,43 @@ def run_rule_engine_for_category(
     sayfa_adi: Optional[str],
 ) -> List[ValidationIssue]:
     """
-    valid_acil.xlsx → acil_kural_def → buradan RANGE / BOOLEAN_CHANGE vb. uygular.
+    Kategori bağımsız kural motoru:
+    - acil_kural_def + ileride dogum_kural_def vs. değil,
+      tek bir generic kural tablosundan okuyoruz (rule_def gibi).
     """
-    if kategori.upper() != "ACIL":
-        return []
-    kategori_u = kategori.upper()
-    rules = load_rules_by_category()
+    # Burada kategori bilgisini mutlaka geçiriyoruz:
+    rules = load_rules_by_category(kategori)
+
+    # Eğer sayfa_adi filtrelemek istersen:
+    if sayfa_adi:
+        rules = rules[(rules["sayfa_adi"] == sayfa_adi) | rules["sayfa_adi"].isna()]
+
     issues: List[ValidationIssue] = []
 
-    # Aynı anda çoklu sayfa kullanırsak sayfa_adi ile filtreleyebiliriz
-    if sayfa_adi:
-        rules_use = rules[(rules["sayfa_adi"] == sayfa_adi)]
-    else:
-        rules_use = rules
-
-    period = _infer_period_from_df(df)
-    yil_ay_ok = period is not None
-    if yil_ay_ok:
-        cur_yil, cur_ay = period
-    else:
-        cur_yil = cur_ay = None  # BOOLEAN_CHANGE çalışmaz
-
-    for _, rule in rules_use.iterrows():
+    # Burada kural_tipi'ne göre TS_MEAN / SUM_EQ / RATIO_RANGE vs. çağırıyoruz
+    for _, rule in rules.iterrows():
         kural_tipi = rule["kural_tipi"]
 
-        if kural_tipi == "RANGE":
-            issues.extend(apply_range_rule_long(rule, df, file_path,kategori_u))
-
-        elif kural_tipi in ("BOOLEAN_CHANGE", "CHANGE") and yil_ay_ok:
-            issues.extend(
-                apply_boolean_change_rule_db(
-                    rule, df, file_path, cur_yil, cur_ay, kategori_u
-                )
-            )
-
-        elif kural_tipi == "TS_MEAN" and yil_ay_ok:
-            # zaman serisi ortalamasına göre sapma
-            issues.extend(
-                apply_ts_mean_rule_db(
-                    rule,
-                    df,
-                    file_path,
-                    cur_yil,
-                    cur_ay,
-                    kategori_u,
-                )
-            )
-
+        if kural_tipi == "TS_MEAN":
+            issues.extend(apply_ts_mean_rule(rule, df, file_path))
         elif kural_tipi == "SUM_EQ":
-            # toplam metrik = alt kalemler toplamı kontrolü
-            issues.extend(
-                apply_sum_eq_rule_db(
-                    rule,
-                    df,
-                    file_path,
-                    kategori_u,
+            issues.extend(apply_sum_eq_rule(rule, df, file_path))
+        elif kural_tipi == "RANGE":
+            # kategori bilgisini de geçir
+            issues.extend(apply_range_rule_long(rule, df, file_path, kategori))
+        elif kural_tipi in ("BOOLEAN_CHANGE", "CHANGE"):
+            period = _infer_period_from_df(df)
+            if period is not None:
+                yil, ay = period
+                issues.extend(
+                    apply_boolean_change_rule_db(
+                        rule, df, file_path, yil, ay, kategori
+                    )
                 )
-            )
-        elif kural_tipi == "RATIO_RANGE":
-            issues.extend(apply_ratio_range_rule_db(rule, file_path))
-
+        
 
     return issues
+
 
 
 # ==========================================================
@@ -1136,17 +882,28 @@ def run_validations(
     )
 
     # 2) Zorunlu kolonlar tam ise genel kurallar
+        # 2) Zorunlu kolonlar tam ise genel kurallar
     if not any(i.severity == Severity.FATAL for i in issues):
         issues += v_year_month_range(df)
         issues += v_metric_numeric(df)
 
-        # 3) ACIL'e özel kural motoru (acil_kural_def)
         # 3) Kural motoru (TS_MEAN, RANGE, BOOLEAN_CHANGE, SUM_EQ, RATIO_RANGE...)
         issues += run_rule_engine_for_category(df, file_path, kategori, sayfa_adi)
 
         # 4) Heuristic kurallar (tüm kategoriler için geçerli)
-        issues += v_zero_while_others_positive(df)
-        issues += v_high_outlier(df)
+        # Aynı (yil, ay, metrik_adi) grubunda kurum bazlı kontrol
+        issues += v_zero_while_others_positive_generic(
+            df,
+            group_cols=["yil", "ay", "metrik_adi"],
+            id_col="kurum_kodu",
+        )
+
+        issues += v_high_outlier_generic(
+            df,
+            group_cols=["yil", "ay", "metrik_adi"],
+            id_col="kurum_kodu",
+        )
+
 
     # 5) Ortak metadata
     for i in issues:
