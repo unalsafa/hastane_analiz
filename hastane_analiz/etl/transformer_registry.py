@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional, List
 import pandas as pd
 
-from hastane_analiz.etl.transformers.acil import transform_acil
 from hastane_analiz.etl.transformers.wide_to_long import transform_wide_to_long
 
 
@@ -14,7 +13,7 @@ class TransformerEntry:
 
 # kategori -> list of TransformerEntry. Aynı kategori içinde birden çok sayfa desteklenir
 TRANSFORMER_REGISTRY: dict[str, List[TransformerEntry]] = {
-    "ACIL": [TransformerEntry(fn=transform_acil, sayfa_adi="ACIL")],
+    "ACIL": [TransformerEntry(fn=transform_wide_to_long, sayfa_adi="ACIL")],
     "DOGUM": [TransformerEntry(fn=transform_wide_to_long, sayfa_adi="DOĞUM")],
     "AMELIYATHANE": [TransformerEntry(fn=transform_wide_to_long, sayfa_adi="AMELİYATHANE")],
     "ANADAL_YANDAL": [TransformerEntry(fn=transform_wide_to_long, sayfa_adi="ANADAL YANDAL")],
