@@ -1,6 +1,5 @@
-# hastane_analiz/etl/transformers/acil.py
-
 import pandas as pd
+from typing import Optional, List
 
 from hastane_analiz.etl.transformers.transform_utils import (
     DEFAULT_ID_COLS,
@@ -12,37 +11,42 @@ from hastane_analiz.etl.transformers.transform_utils import (
 )
 
 
-def transform_acil(
+def transform_wide_to_long(
     df: pd.DataFrame,
-    sheet_name: str = "ACIL",
-    kategori: str | None = None,  # kategori parametresi standart imza icin tutulur
-    sayfa_adi: str | None = None,
+    kategori: Optional[str] = None,
+    sayfa_adi: Optional[str] = None,
+    id_cols: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """
-    ACIL sayfasini long form'a cevirir.
+    Genel wide->long donusumu (kategori ve sayfa_adi bilgisi ile DB'deki kural
+    tablosundan bool/measure ayrimini yapar).
 
-    Cikis kolonlari:
-      - yil
-      - ay
-      - kurum_kodu
-      - metrik_adi   (Excel kolon adi / metrik_yolu)
-      - metrik_deger (numeric, bool'lar 1/0)
+    Cikis kolonlari: yil, ay, kurum_kodu, metrik_adi, metrik_deger
     """
     df, id_cols = prepare_common_columns(
         df,
-        id_cols=DEFAULT_ID_COLS,
+        id_cols=id_cols or DEFAULT_ID_COLS,
         convert_id_to_numeric=True,
     )
 
     ignore_cols = DEFAULT_IGNORE_COLS
 
-    # Kurallardan bool metrik listesini cek
-    try:
-        bool_metric_names = load_bool_metrics_for_category("ACIL", sayfa_adi=sayfa_adi or sheet_name)
-    except Exception:
-        bool_metric_names = set()
+    # Kurallardan bool metrik listesini cek (eger kategori verilmis ise DB'den al)
+    bool_metric_names = set()
+    if kategori:
+        try:
+            bool_metric_names = load_bool_metrics_for_category(
+                kategori,
+                sayfa_adi=sayfa_adi,
+            )
+        except Exception:
+            # DB erisimi yoksa veya hata varsa bos set ile devam et
+            bool_metric_names = set()
 
+    # Aday metrik kolonlari
     candidate_cols = [c for c in df.columns if c not in id_cols and c not in ignore_cols]
+
+    # Kurala gore bool / numeric ayir
     bool_cols, numeric_cols = split_metric_columns(candidate_cols, bool_metric_names)
 
     # Sayisal metrikler (default: numeric kabul)
@@ -54,9 +58,7 @@ def transform_acil(
             var_name="metrik_adi",
             value_name="metrik_deger",
         )
-        long_num["metrik_deger"] = pd.to_numeric(
-            long_num["metrik_deger"], errors="coerce"
-        )
+        long_num["metrik_deger"] = pd.to_numeric(long_num["metrik_deger"], errors="coerce")
         long_num = long_num.dropna(subset=["metrik_deger"])
     else:
         long_num = pd.DataFrame(columns=id_cols + ["metrik_adi", "metrik_deger"])

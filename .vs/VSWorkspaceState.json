@@ -10,6 +10,6 @@
     "\\hastane_analiz\\etl\\transformers",
     "\\hastane_analiz\\scripts"
   ],
-  "SelectedNode": "\\hastane_analiz\\etl\\transformers\\acil.py",
+  "SelectedNode": "\\hastane_analiz\\scripts\\run_dim_duzenleyen.py",
   "PreviewInSolutionExplorer": false
 }

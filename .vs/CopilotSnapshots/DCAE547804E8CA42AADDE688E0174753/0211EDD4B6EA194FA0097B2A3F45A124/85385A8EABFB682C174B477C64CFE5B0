@@ -1,0 +1,54 @@
+﻿import pandas as pd
+from typing import Optional, List
+
+
+def transform_wide_to_long(
+    df: pd.DataFrame,
+    sheet_name: Optional[str] = None,
+    id_cols: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Genel wide->long dönüşümü:
+    - id_cols: default ["yil","ay","kurum_kodu"]
+    - Çıktı kolonları: yil, ay, kurum_kodu, metrik_adi, metrik_deger
+    """
+    df = df.copy()
+
+    # Kolon normalizasyonu (küçük-büyük harf / farklı adlandırmalar)
+    rename_map = {
+        "Yil": "yil",
+        "Yıl": "yil",
+        "Ay": "ay",
+        "BirimId": "kurum_kodu",
+        "BirimID": "kurum_kodu",
+        "Birim Id": "kurum_kodu",
+    }
+    df.rename(columns=rename_map, inplace=True)
+
+    if id_cols is None:
+        id_cols = ["yil", "ay", "kurum_kodu"]
+
+    # Eksik id kolonları ekle
+    for col in id_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    # Metrik kolonları = id_cols dışındaki kalan kolonlar
+    metric_cols = [c for c in df.columns if c not in id_cols]
+
+    # Eğer metrik yoksa boş long DF döndür
+    if not metric_cols:
+        return pd.DataFrame(columns=id_cols + ["metrik_adi", "metrik_deger"])
+
+    long_df = df[id_cols + metric_cols].melt(
+        id_vars=id_cols,
+        value_vars=metric_cols,
+        var_name="metrik_adi",
+        value_name="metrik_deger",
+    )
+
+    # Sayısal olmayanları NaN yap ve boşları at
+    long_df["metrik_deger"] = pd.to_numeric(long_df["metrik_deger"], errors="coerce")
+    long_df = long_df.dropna(subset=["metrik_deger"])
+
+    return long_df

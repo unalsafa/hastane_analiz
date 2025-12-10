@@ -39,6 +39,9 @@ def insert_long_df_to_raw_veri(
             else None
         )
 
+        raw_val = None if pd.isna(row["metrik_deger"]) else row["metrik_deger"]
+        num_val = None if pd.isna(row["metrik_deger"]) else float(row["metrik_deger"])
+
         values = (
             yil,
             ay,
@@ -46,8 +49,8 @@ def insert_long_df_to_raw_veri(
             kategori,
             sayfa_adi or kategori,          # sheet yoksa kategori ile ayni
             row["metrik_adi"],
-            str(row["metrik_deger"]),       # metrik_deger_raw
-            float(row["metrik_deger"]),     # metrik_deger_numeric
+            None if raw_val is None else str(raw_val),  # metrik_deger_raw
+            num_val,                                     # metrik_deger_numeric
             file_path,
         )
         rows.append(values)

@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any, Callable
 
 import json
 import pandas as pd
+import numpy as np
 
 from hastane_analiz.db.connection import get_connection, batch_insert
 
@@ -947,6 +948,15 @@ def save_issues_to_db(issues: List[ValidationIssue]) -> None:
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
     """
 
+    def _json_default(obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (pd.Timestamp,)):
+            return obj.isoformat()
+        return str(obj)
+
     rows: List[tuple] = []
     for i in issues:
         rows.append(
@@ -958,7 +968,7 @@ def save_issues_to_db(issues: List[ValidationIssue]) -> None:
                 i.kategori,
                 i.sayfa_adi,
                 i.row_index,
-                json.dumps(i.context or {}, ensure_ascii=False),
+                json.dumps(i.context or {}, ensure_ascii=False, default=_json_default),
             )
         )
 
