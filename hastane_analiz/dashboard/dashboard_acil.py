@@ -183,7 +183,17 @@ def load_quality_issues():
             kategori,
             sayfa_adi,
             row_index,
-            context_json,
+            yil,
+            ay,
+            kurum_kodu,
+            metrik_adi,
+            deger,
+            prev_mean,
+            ratio,
+            q1,
+            q3,
+            median,
+            threshold,
             olusturma_zamani
         FROM hastane_analiz.etl_kalite_sonuc
         WHERE seviye IN ('WARN','FATAL')
@@ -618,21 +628,14 @@ def main():
         if df_issues.empty:
             st.info("Şu an WARN veya FATAL kayıt bulunmuyor, Excel oluşturulacak veri yok.")
         else:
-            # context_json'u kolonlara aç
-            ctx = pd.json_normalize(df_issues["context_json"].fillna({}), max_level=1)
-            ctx.columns = [f"ctx_{c}" for c in ctx.columns]
+            df_export = df_issues.copy()
 
-            df_export = pd.concat(
-                [df_issues.drop(columns=["context_json"]), ctx],
-                axis=1,
-            )
-
+            # timezone'lu datetime kolonlarını naive yap
             dt_cols = df_export.select_dtypes(include=["datetimetz"]).columns
             if len(dt_cols) > 0:
                 df_export[dt_cols] = df_export[dt_cols].apply(
                     lambda s: s.dt.tz_localize(None)
-                 )
-
+                )
 
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:

@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from hastane_analiz.config.settings import INPUT_FOLDER
 from hastane_analiz.etl.excel_reader import read_excel_file, detect_category_from_filename

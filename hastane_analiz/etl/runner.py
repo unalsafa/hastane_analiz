@@ -6,7 +6,8 @@ from hastane_analiz.config.settings import INPUT_FOLDER
 from hastane_analiz.etl.excel_reader import detect_category_from_filename
 from hastane_analiz.etl.transformer_registry import TRANSFORMER_REGISTRY, TransformerEntry
 from hastane_analiz.etl.loaders import insert_long_df_to_raw_veri
-from hastane_analiz.etl.validation import run_validations, save_issues_to_db, Severity
+from hastane_analiz.etl.validation import run_validations, save_issues_to_db, Severity, save_issues_snapshot, infer_period_from_df
+
 
 
 def run_etl_for_folder(folder: str | None = None) -> None:
@@ -59,13 +60,18 @@ def run_etl_for_folder(folder: str | None = None) -> None:
                         print("  -> Long DF bos, insert yapilmadi.")
                         continue
 
-                    issues = run_validations(
-                        long_df,
-                        file_path=str(file_path),
-                        kategori=kategori,
-                        sayfa_adi=sheet,
-                    )
-                    save_issues_to_db(issues)
+                    issues = run_validations(long_df, file_path=str(file_path), kategori=kategori, sayfa_adi=sheet)
+
+                    # Dosyanın dönemi (yil, ay) – her ACIL dosyası için tek dönem bekliyoruz
+                    period = infer_period_from_df(long_df)
+
+                    if period is not None:
+                        yil, ay = period
+                        save_issues_snapshot(issues, kategori=kategori, yil=yil, ay=ay)
+                    else:
+                        # Güvenli fallback: dönem bulunamazsa sadece insert (snapshot yapma)
+                        save_issues_to_db(issues)
+
 
                     fatal_count = sum(1 for i in issues if i.severity == Severity.FATAL)
                     if fatal_count > 0:

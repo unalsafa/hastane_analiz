@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 import pandas as pd
 from hastane_analiz.etl.category_registry import CATEGORY_RULES, DEFAULT_CATEGORY
 

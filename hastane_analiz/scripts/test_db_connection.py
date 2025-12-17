@@ -1,4 +1,4 @@
-﻿from hastane_analiz.db.connection import get_connection
+from hastane_analiz.db.connection import get_connection
 
 def main():
     try:

@@ -11,5 +11,8 @@ Requires-Dist: psycopg2-binary>=2.9
 Requires-Dist: python-dotenv>=1.0
 Requires-Dist: numpy>=1.26
 Requires-Dist: scikit-learn>=1.4
+Requires-Dist: plotly>=5.20
+Requires-Dist: streamlit>=1.30
+Requires-Dist: altair>=5.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0; extra == "dev"

@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 
 # Bu fonksiyon kolon adlarındaki Türkçe/küçük-büyük harf farklarını tolere etmek için
 def _find_first_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -30,7 +30,7 @@ def transform_duzenleyen_dim(df: pd.DataFrame) -> pd.DataFrame:
     col_ilce_adi   = _find_first_column(df, ["Ilce Adi", "İlçe Adı", "Ilce", "İlçe"])
     col_baskanlik  = _find_first_column(df, ["Baskanlik Adi", "Başkanlık Adı", "Baskanlik", "Başkanlık"])
     col_kurum_rol  = _find_first_column(df, ["Kurum Rol Adi", "Kurum Rolü", "Rol", "Kurum Rol Adı"])
-
+    col_kurum_tip  = _find_first_column(df, ["KurumTipi"])
     if col_kurum_kodu is None:
         raise ValueError("DUZENLEYEN dosyasinda 'Kurum Kodu' kolonu bulunamadi. Kolon adlarini kontrol et.")
 
@@ -57,7 +57,10 @@ def transform_duzenleyen_dim(df: pd.DataFrame) -> pd.DataFrame:
         out["kurum_rol_adi"] = df[col_kurum_rol].astype(str).str.strip()
     else:
         out["kurum_rol_adi"] = None
-
+    if col_kurum_tip is not None:
+        out["kurum_tipi"] = df[col_kurum_tip].astype(str).str.strip()
+    else:
+        out["kurum_tipi"] = None
     # Kurum kodu olmayan satirlari at
     out = out.dropna(subset=["kurum_kodu"])
     out["kurum_kodu"] = out["kurum_kodu"].astype("int64")

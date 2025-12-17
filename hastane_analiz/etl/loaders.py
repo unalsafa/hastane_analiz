@@ -1,4 +1,4 @@
-﻿# hastane_analiz/etl/loaders.py
+# hastane_analiz/etl/loaders.py
 
 import pandas as pd
 from hastane_analiz.db.connection import batch_insert

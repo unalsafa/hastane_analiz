@@ -1,4 +1,4 @@
-﻿# hastane_analiz/etl/schema_registry.py
+# hastane_analiz/etl/schema_registry.py
 
 RAW_VERI_COLUMNS = [
     "yil",

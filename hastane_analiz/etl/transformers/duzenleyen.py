@@ -1,4 +1,4 @@
-﻿# hastane_analiz/etl/transformers/duzenleyen.py
+# hastane_analiz/etl/transformers/duzenleyen.py
 
 import pandas as pd
 from hastane_analiz.etl.schema_registry import ID_COLS

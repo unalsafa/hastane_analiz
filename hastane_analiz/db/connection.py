@@ -1,4 +1,4 @@
-﻿# hastane_analiz/db/connection.py
+# hastane_analiz/db/connection.py
 
 import psycopg2
 from psycopg2.extras import execute_batch
