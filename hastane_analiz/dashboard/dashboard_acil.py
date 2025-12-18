@@ -1,655 +1,620 @@
-import streamlit as st
 import pandas as pd
-from psycopg2 import connect
-from psycopg2.extras import DictCursor
-import io  # dosyanın başındaki importlara ekle
+import streamlit as st
+import plotly.graph_objects as go
+
+from io import BytesIO
+from hastane_analiz.db.connection import get_connection
+
+# =========================================================
+# TEMA / RENK PALETİ
+# =========================================================
+MINISTRY_TURQUOISE = "#00A3B4"
+MINISTRY_TURQUOISE_DARK = "#007C8A"
+PRIMARY_GREEN = "#0B6E4F"
+ACCENT_BLUE = "#0EA5E9"
+WARN_COLOR = "#F59E0B"
+DANGER_COLOR = "#EF4444"
+
+BG_APP = "#EEF2F6"
+BG_CARD = "#FFFFFF"
+BORDER = "#D8DEE9"
+TEXT = "#0F172A"
+MUTED = "#64748B"
+
+PLOT_TEMPLATE = "plotly_white"
 
 
-# ============================================================
-# DB AYARLARI
-# ============================================================
+# =========================================================
+# CSS / UI (DOGUM’dan aynı mantık)
+# =========================================================
+def inject_css():
+    TOPBAR_H = 86  # topbar yüksekliği (px)
 
-DB_CONFIG = {
-    "dbname": "hastane_analiz",
-    "user": "postgres",
-    "password": "deneme",
-    "host": "localhost",
-    "port": 5432,
-}
+    st.markdown(
+        f"""
+        <style>
+        /* =========================
+           APP BACKGROUND / LAYOUT
+        ========================== */
+        .stApp {{
+            background: {BG_APP};
+        }}
+
+        /* Topbar fixed olduğu için içerik topbar altından başlasın */
+        div.block-container {{
+            padding-top: {TOPBAR_H + 18}px !important;
+            padding-bottom: 2rem;
+        }}
+
+        /* =========================
+           DEPLOY GİZLE (DOM'una göre)
+           (Sidebar okunu bozmaz)
+        ========================== */
+        div[data-testid="stAppDeployButton"] {{
+            display: none !important;
+        }}
+        button[aria-label="Deploy"], button[title="Deploy"] {{
+            display: none !important;
+        }}
+
+        /* =========================
+           STREAMLIT CHROME
+           (DOM kalsın, sadece görünmesin)
+        ========================== */
+        header[data-testid="stHeader"] {{
+            background: transparent !important;
+            height: 0px !important;
+            border: 0 !important;
+        }}
+        [data-testid="stToolbar"] {{
+            background: transparent !important;
+            height: 0px !important;
+        }}
+        #MainMenu {{ visibility: hidden !important; }}
+        footer {{ visibility: hidden !important; }}
+
+        /* =========================
+           SIDEBAR
+        ========================== */
+        section[data-testid="stSidebar"] {{
+            background: linear-gradient(180deg, {MINISTRY_TURQUOISE_DARK} 0%, {MINISTRY_TURQUOISE} 100%);
+            border-right: 0px;
+        }}
+        section[data-testid="stSidebar"] * {{
+            color: white !important;
+        }}
+        section[data-testid="stSidebar"] .stMarkdown,
+        section[data-testid="stSidebar"] label {{
+            color: white !important;
+        }}
+
+        /* Sidebar inputs */
+        section[data-testid="stSidebar"] .stSelectbox > div,
+        section[data-testid="stSidebar"] .stMultiSelect > div,
+        section[data-testid="stSidebar"] .stTextInput > div {{
+            background: rgba(255,255,255,0.12) !important;
+            border-radius: 10px !important;
+            border: 1px solid rgba(255,255,255,0.25) !important;
+        }}
+        section[data-testid="stSidebar"] input {{
+            color: white !important;
+        }}
+
+        /* =========================
+           TOPBAR (FIXED)
+        ========================== */
+        .topbar {{
+            position: fixed;
+            top: 10px;
+            left: 200px;    /* sidebar açıkken hizalı */
+            right: 5px;
+            z-index: 9999;
+
+            background: {BG_CARD};
+            border: 1px solid {BORDER};
+            border-radius: 16px;
+            padding: 14px 16px;
+            box-shadow: 0 14px 34px rgba(2, 6, 23, 0.10);
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }}
+
+        /* Sol tarafta sidebar oku için boşluk */
+        .topbar-left {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 280px;
+            margin-left: 56px;
+        }}
+
+        .logo-badge {{
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: rgba(11,110,79,0.10);
+            border: 1px solid rgba(11,110,79,0.20);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: {PRIMARY_GREEN};
+        }}
+
+        .topbar-title {{
+            font-weight: 800;
+            color: {TEXT};
+            margin: 0;
+            line-height: 1.1;
+        }}
+        .topbar-sub {{
+            font-size: 12px;
+            color: {MUTED};
+            margin-top: 2px;
+        }}
+
+        .topbar-center {{
+            flex: 1;
+            display: flex;
+            justify-content: center;
+        }}
+        .search-pill {{
+            width: min(520px, 100%);
+            background: #F1F5F9;
+            border: 1px solid {BORDER};
+            border-radius: 999px;
+            padding: 10px 14px;
+            color: {MUTED};
+            font-size: 13px;
+        }}
+
+        .topbar-right {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 120px;
+            justify-content: flex-end;
+        }}
+        .lang-pill {{
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            background: rgba(22,163,74,0.12);
+            border: 1px solid rgba(22,163,74,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: {PRIMARY_GREEN};
+        }}
+
+        /* =========================
+           SIDEBAR COLLAPSE/EXPAND BUTTON
+           (ok butonu topbar üstünde dursun)
+        ========================== */
+        button[data-testid="stSidebarCollapseButton"],
+        button[data-testid="stSidebarExpandButton"] {{
+            position: fixed !important;
+            top: 22px !important;
+            left: 28px !important;
+            z-index: 10000 !important;
+
+            background: #FFFFFF !important;
+            border: 1px solid {BORDER} !important;
+            border-radius: 12px !important;
+            box-shadow: 0 10px 26px rgba(2, 6, 23, 0.12) !important;
+
+            width: 44px !important;
+            height: 44px !important;
+
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }}
+
+        button[data-testid="stSidebarCollapseButton"] span[data-testid="stIconMaterial"],
+        button[data-testid="stSidebarExpandButton"] span[data-testid="stIconMaterial"] {{
+            color: rgba(49, 51, 63, 0.75) !important;
+        }}
+
+        /* =========================
+           CARDS + SECTION TITLE BAR
+        ========================== */
+        .card {{
+            background: {BG_CARD};
+            border: 1px solid {BORDER};
+            border-radius: 16px;
+            padding: 14px 16px;
+            box-shadow: 0 10px 26px rgba(2, 6, 23, 0.06);
+        }}
+
+        .section-title {{
+            background: linear-gradient(90deg, {MINISTRY_TURQUOISE_DARK} 0%, {MINISTRY_TURQUOISE} 100%);
+            color: white;
+            font-weight: 800;
+            border-radius: 12px 12px 0 0;
+            padding: 10px 14px;
+            margin: -14px -16px 12px -16px;
+            font-size: 14px;
+        }}
+
+        .section-gap {{
+            height: 12px;
+        }}
+
+        .kpi-title {{
+            font-size: 11px;
+            color: {MUTED};
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 6px;
+        }}
+        .kpi-value {{
+            font-size: 22px;
+            font-weight: 900;
+            color: {TEXT};
+            line-height: 1.1;
+        }}
+        .kpi-sub {{
+            margin-top: 6px;
+            font-size: 12px;
+            color: {MUTED};
+        }}
+
+        .stDataFrame {{
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid {BORDER};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
-def get_connection():
-    return connect(**DB_CONFIG, cursor_factory=DictCursor)
+def topbar():
+    st.markdown(
+        """
+        <div class="topbar">
+            <div class="topbar-left">
+                <div class="logo-badge">SB</div>
+                <div>
+                    <div class="topbar-title">Acil Dashboard</div>
+                    <div class="topbar-sub">Halk Sağlığı • Acil • Analiz</div>
+                </div>
+            </div>
+            <div class="topbar-center">
+                <div class="search-pill">🔍  Hastane / İlçe / Başkanlık ara</div>
+            </div>
+            <div class="topbar-right">
+                <div class="lang-pill">TR</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
-# Küçük bir yardımcı: her yerde tekrar yazmamak için
-def read_sql(query: str, params: dict | None = None) -> pd.DataFrame:
+# =========================================================
+# DB
+# =========================================================
+def read_sql(query: str, params=None) -> pd.DataFrame:
     with get_connection() as conn:
         return pd.read_sql(query, conn, params=params)
 
 
-# ============================================================
-#  ACIL DASHBOARD İÇİN CACHE'LENEN YARDIMCI FONKSIYONLAR
-# ============================================================
-
-@st.cache_data
-def load_filter_data():
-    """
-    Yıl/Ay, metrik listesi ve ilçe listesini getirir.
-    """
-    sql_periods = """
-        SELECT DISTINCT yil, ay
-        FROM hastane_analiz.v_fact_metrik
-        WHERE kategori = 'ACIL'
-        ORDER BY yil DESC, ay DESC;
-    """
-
-    sql_metrics = """
-        SELECT metrik_kodu, metrik_adi, veri_tipi
-        FROM hastane_analiz.metric_def
-        WHERE kategori = 'ACIL'
-          AND aktif_mi = true
-          AND metrik_kodu IS NOT NULL
-        ORDER BY sayfa_adi, metrik_adi;
-    """
-
-    sql_districts = """
-        SELECT DISTINCT ilce_adi
-        FROM hastane_analiz.v_fact_metrik
-        WHERE kategori = 'ACIL'
-        ORDER BY ilce_adi;
-    """
-
-    df_periods = read_sql(sql_periods)
-    df_metrics = read_sql(sql_metrics)
-    df_districts = read_sql(sql_districts)
-
-    return df_periods, df_metrics, df_districts
+@st.cache_data(ttl=600)
+def load_acil_data() -> pd.DataFrame:
+    return read_sql("SELECT * FROM hastane_analiz.v_acil_oran;")
 
 
-@st.cache_data
-def load_metric_data(yil: int, ay: int, metrik_kodu: str, ilceler: list[str] | None):
-    """
-    Seçilen yıl/ay + metrik + (opsiyonel) ilçe filtresi için detay veri.
-    Her satır: hastane bazlı.
-    """
-    base_sql = """
-        SELECT
-            yil,
-            ay,
-            ilce_adi,
-            birim_adi,
-            metrik_kodu,
-            toplam_deger
-        FROM hastane_analiz.v_fact_metrik
-        WHERE kategori = 'ACIL'
-          AND yil = %(yil)s
-          AND ay  = %(ay)s
-          AND metrik_kodu = %(metrik_kodu)s
-    """
-
-    params: dict = {"yil": int(yil), "ay": int(ay), "metrik_kodu": metrik_kodu}
-
-    if ilceler:
-        base_sql += " AND ilce_adi IN %(ilceler)s"
-        params["ilceler"] = tuple(ilceler)
-
-    df = read_sql(base_sql, params=params)
-    return df
-
-
-@st.cache_data
-def load_trend_data(metrik_kodu: str, ilceler: list[str] | None):
-    """
-    Seçilen metrik için TÜM yıllar/aylar bazında trend serisi.
-    İsteğe bağlı ilçe filtresi.
-    """
+@st.cache_data(ttl=300)
+def load_validation_issues(kategori: str) -> pd.DataFrame:
     sql = """
-        SELECT
-            yil,
-            ay,
-            SUM(toplam_deger) AS toplam_deger
-        FROM hastane_analiz.v_fact_metrik
-        WHERE kategori = 'ACIL'
-          AND metrik_kodu = %(metrik_kodu)s
+    WITH last_run AS (
+        SELECT DISTINCT ON (kategori, yil)
+            kategori, yil, run_id
+        FROM hastane_analiz.validation_run
+        WHERE kategori = %s
+        ORDER BY kategori, yil, run_id DESC
+    )
+    SELECT
+        vi.yil,
+        vi.ay,
+        vi.kurum_kodu,
+        bd.birim_adi,
+        bd.ilce_adi,
+        bd.baskanlik_adi,
+        bd.kurum_rol_adi,
+        vi.metrik_adi AS hatali_veri,
+        vi.severity,
+        vi.rule_code,
+        vi.message AS hata_sebebi,
+        vi.oran,
+        vi.diger_ay_ort
+    FROM hastane_analiz.validation_issue vi
+    JOIN last_run lr
+      ON lr.run_id = vi.run_id
+    LEFT JOIN hastane_analiz.birim_def bd
+      ON bd.kurum_kodu = vi.kurum_kodu
+    WHERE vi.kategori = %s
+      AND vi.rule_code IN ('MONTH_OUTLIER','MONTH_MISSING')
+    ORDER BY vi.yil DESC, vi.ay DESC,
+             bd.baskanlik_adi NULLS LAST, bd.ilce_adi NULLS LAST, bd.birim_adi NULLS LAST;
     """
+    return read_sql(sql, params=(kategori, kategori))
 
-    params: dict = {"metrik_kodu": metrik_kodu}
 
-    if ilceler:
-        sql += " AND ilce_adi IN %(ilceler)s"
-        params["ilceler"] = tuple(ilceler)
+# =========================================================
+# HELPERS
+# =========================================================
+def fmt_int(x) -> str:
+    try:
+        return f"{int(round(float(x))):,}".replace(",", ".")
+    except Exception:
+        return "0"
 
-    sql += """
-        GROUP BY yil, ay
-        ORDER BY yil, ay;
-    """
 
-    df = read_sql(sql, params=params)
+def fmt_pct(x, digits=2) -> str:
+    if x is None or pd.isna(x):
+        return "-"
+    try:
+        return f"{float(x):.{digits}f} %"
+    except Exception:
+        return "-"
 
-    if not df.empty:
-        df["ay"] = df["ay"].astype(int)
-        df["period"] = (
-            df["yil"].astype(int).astype(str) + "-" +
-            df["ay"].astype(str).str.zfill(2)
+
+def card_kpi(title: str, value: str, sub: str = ""):
+    st.markdown(
+        f"""
+        <div class="card">
+            <div class="kpi-title">{title}</div>
+            <div class="kpi-value">{value}</div>
+            <div class="kpi-sub">{sub}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def df_to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Validation") -> bytes:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
+    return output.getvalue()
+
+
+# =========================================================
+# FILTERS
+# =========================================================
+def filter_block(df: pd.DataFrame) -> pd.DataFrame:
+    st.sidebar.markdown("## Filtreler")
+
+    yil_list = sorted(df["yil"].dropna().unique().tolist())
+    yil = st.sidebar.selectbox("Yıl", yil_list, index=len(yil_list) - 1 if yil_list else 0)
+
+    ay_list = sorted(df.loc[df["yil"] == yil, "ay"].dropna().unique().tolist())
+    ay = st.sidebar.multiselect("Ay", ay_list, default=ay_list)
+
+    baskanlik = st.sidebar.multiselect(
+        "Başkanlık",
+        sorted(df["baskanlik_adi"].dropna().unique().tolist()),
+        default=[],
+    )
+    ilce = st.sidebar.multiselect(
+        "İlçe",
+        sorted(df["ilce_adi"].dropna().unique().tolist()),
+        default=[],
+    )
+    kurum_rol = st.sidebar.multiselect(
+        "Kurum Rolü (A1/A2/B/C...)",
+        sorted(df["kurum_rol_adi"].dropna().unique().tolist()),
+        default=[],
+    )
+
+    f = df[df["yil"] == yil].copy()
+    f = f[f["ay"].isin(ay)]
+
+    if baskanlik:
+        f = f[f["baskanlik_adi"].isin(baskanlik)]
+    if ilce:
+        f = f[f["ilce_adi"].isin(ilce)]
+    if kurum_rol:
+        f = f[f["kurum_rol_adi"].isin(kurum_rol)]
+
+    return f
+
+
+# =========================================================
+# BLOCKS
+# =========================================================
+def kpi_row(df: pd.DataFrame):
+    toplam = df["toplam_triaj_hasta"].sum() if "toplam_triaj_hasta" in df.columns else 0
+    amb = df["ambulans_ile_gelen"].sum() if "ambulans_ile_gelen" in df.columns else 0
+    tekrar = df["tekrar_24s"].sum() if "tekrar_24s" in df.columns else 0
+    yatis = df["yatis_sayisi"].sum() if "yatis_sayisi" in df.columns else 0
+
+    amb_oran = (amb / toplam * 100) if toplam else pd.NA
+    tekrar_oran = (tekrar / toplam * 100) if toplam else pd.NA
+    yatis_oran = (yatis / toplam * 100) if toplam else pd.NA
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    with c1:
+        card_kpi("Toplam Triaj Hasta", fmt_int(toplam), "Seçili dönem")
+    with c2:
+        card_kpi("Ambulans ile Gelen", fmt_int(amb), "Seçili dönem")
+    with c3:
+        card_kpi("Ambulans Oranı", fmt_pct(amb_oran, 2), "Ambulans / Toplam")
+    with c4:
+        card_kpi("24s Tekrar", fmt_int(tekrar), "Seçili dönem")
+    with c5:
+        card_kpi("Tekrar Oranı", fmt_pct(tekrar_oran, 2), "Tekrar / Toplam")
+    with c6:
+        card_kpi("Yatış Oranı", fmt_pct(yatis_oran, 2), "Yatış / Toplam")
+
+
+def trend_block(df: pd.DataFrame):
+    g = (
+        df.groupby(["yil", "ay"], as_index=False)
+        .agg(
+            toplam=("toplam_triaj_hasta", "sum"),
+            kirmizi=("kirmizi_hasta", "sum") if "kirmizi_hasta" in df.columns else ("toplam_triaj_hasta", "sum"),
+            sari=("sari_hasta", "sum") if "sari_hasta" in df.columns else ("toplam_triaj_hasta", "sum"),
+            yesil=("yesil_muayene", "sum") if "yesil_muayene" in df.columns else ("toplam_triaj_hasta", "sum"),
+        )
+        .sort_values(["yil", "ay"])
+    )
+    g["tarih"] = pd.to_datetime(dict(year=g["yil"], month=g["ay"], day=1))
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=g["tarih"], y=g["toplam"], mode="lines+markers", name="Toplam Triaj", line=dict(color=PRIMARY_GREEN, width=3)))
+    fig.add_trace(go.Scatter(x=g["tarih"], y=g["kirmizi"], mode="lines+markers", name="Kırmızı", line=dict(color=DANGER_COLOR, width=2)))
+    fig.add_trace(go.Scatter(x=g["tarih"], y=g["sari"], mode="lines+markers", name="Sarı", line=dict(color=WARN_COLOR, width=2)))
+    fig.add_trace(go.Scatter(x=g["tarih"], y=g["yesil"], mode="lines+markers", name="Yeşil (muayene)", line=dict(color=ACCENT_BLUE, width=2)))
+
+    fig.update_layout(
+        template=PLOT_TEMPLATE,
+        height=380,
+        margin=dict(l=10, r=10, t=10, b=10),
+        legend_title_text="",
+        yaxis_title=None,
+        xaxis_title=None,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def ranking_table(df: pd.DataFrame):
+    grp = (
+        df.groupby(["baskanlik_adi", "ilce_adi", "birim_adi"], as_index=False)
+        .agg(
+            toplam=("toplam_triaj_hasta", "sum"),
+            kirmizi_oran=("kirmizi_oran", "mean"),
+            sari_oran=("sari_oran", "mean"),
+            yesil_oran=("yesil_oran", "mean"),
+            ambulans_oran=("ambulans_oran", "mean") if "ambulans_oran" in df.columns else ("kirmizi_oran", "mean"),
+        )
+    )
+
+    sort_by = st.selectbox(
+        "Sıralama kriteri",
+        options=["toplam", "ambulans_oran", "kirmizi_oran", "sari_oran", "yesil_oran"],
+        index=0,
+    )
+    grp = grp.sort_values(by=sort_by, ascending=False)
+
+    out = grp.copy()
+    out["toplam"] = out["toplam"].map(fmt_int)
+    for c in ["ambulans_oran", "kirmizi_oran", "sari_oran", "yesil_oran"]:
+        if c in out.columns:
+            out[c] = out[c].map(lambda x: fmt_pct(x, 2))
+
+    show_cols = ["baskanlik_adi", "ilce_adi", "birim_adi", "toplam", "ambulans_oran", "kirmizi_oran", "sari_oran", "yesil_oran"]
+    show_cols = [c for c in show_cols if c in out.columns]
+    st.dataframe(out[show_cols], use_container_width=True, hide_index=True)
+
+
+def validation_table_block(df_filtered: pd.DataFrame, kategori: str = "ACIL"):
+    issues = load_validation_issues(kategori)
+    if issues.empty:
+        st.success("Validation issue bulunamadı (MONTH_OUTLIER / MONTH_MISSING).")
+        return
+
+    # Dashboard filtreleriyle uyumlu hale getir (yıl/ay/baskanlik/ilce/rol)
+    yil = int(df_filtered["yil"].iloc[0]) if "yil" in df_filtered.columns and not df_filtered.empty else None
+    ay_list = sorted(df_filtered["ay"].dropna().unique().tolist()) if "ay" in df_filtered.columns else []
+
+    if yil is not None and "yil" in issues.columns:
+        issues = issues[issues["yil"] == yil]
+    if ay_list and "ay" in issues.columns:
+        issues = issues[issues["ay"].isin(ay_list)]
+
+    for col in ["baskanlik_adi", "ilce_adi", "kurum_rol_adi", "birim_adi"]:
+        if col in df_filtered.columns and col in issues.columns:
+            vals = sorted(df_filtered[col].dropna().unique().tolist())
+            if vals:
+                issues = issues[issues[col].isin(vals)]
+
+    if issues.empty:
+        st.info("Seçili filtrelerde validation issue yok.")
+        return
+
+    st.markdown("<div class='card'><div class='section-title'>Kalite Uyarıları (MONTH_OUTLIER / MONTH_MISSING)</div>", unsafe_allow_html=True)
+
+    # küçük temizlik/format
+    out = issues.copy()
+    if "oran" in out.columns:
+        out["oran"] = pd.to_numeric(out["oran"], errors="coerce").round(4)
+    if "diger_ay_ort" in out.columns:
+        out["diger_ay_ort"] = pd.to_numeric(out["diger_ay_ort"], errors="coerce").round(1)
+
+    show_cols = [
+        "yil", "ay", "kurum_kodu", "birim_adi", "hatali_veri",
+        "severity", "rule_code", "hata_sebebi", "oran", "diger_ay_ort"
+    ]
+    show_cols = [c for c in show_cols if c in out.columns]
+
+    export_df = out[show_cols].copy()
+
+    # ✅ Tek buton: filtrelenmiş sonucu Excel'e aktar
+    if not export_df.empty:
+        st.download_button(
+            label="📥 Validation Excel indir",
+            data=df_to_excel_bytes(export_df, sheet_name="Validation"),
+            file_name=f"{kategori}_VALIDATION_{yil}.xlsx" if yil else f"{kategori}_VALIDATION.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"dl_validation_single_{kategori}_{yil}",
         )
 
-    return df
+    st.dataframe(export_df, use_container_width=True, hide_index=True)
+    st.caption("Not: Bu tablo, ilgili kategori için en son validation_run çıktısından gelir.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ============================================================
-#  KALİTE DASHBOARD İÇİN YARDIMCI FONKSIYONLAR
-# ============================================================
-
-@st.cache_data
-def load_quality_summary():
-    sql = """
-        SELECT *
-        FROM hastane_analiz.v_kalite_dosya_ozet
-        ORDER BY fatal_sayisi DESC, warn_sayisi DESC, son_kayit_zamani DESC;
-    """
-    return read_sql(sql)
-
-
-@st.cache_data
-def load_quality_fatal():
-    sql = """
-        SELECT *
-        FROM hastane_analiz.v_kalite_son_fatal
-        ORDER BY olusturma_zamani DESC;
-    """
-    return read_sql(sql)
-
-
-@st.cache_data
-def load_quality_negative():
-    sql = """
-        SELECT *
-        FROM hastane_analiz.v_kalite_raw_negatif
-        ORDER BY yukleme_zamani DESC
-        LIMIT 500;
-    """
-    return read_sql(sql)
-
-@st.cache_data
-def load_quality_issues():
-    sql = """
-        SELECT
-            kalite_id,
-            seviye,
-            kural_kodu,
-            mesaj,
-            kaynak_dosya,
-            kategori,
-            sayfa_adi,
-            row_index,
-            yil,
-            ay,
-            kurum_kodu,
-            metrik_adi,
-            deger,
-            prev_mean,
-            ratio,
-            q1,
-            q3,
-            median,
-            threshold,
-            olusturma_zamani
-        FROM hastane_analiz.etl_kalite_sonuc
-        WHERE seviye IN ('WARN','FATAL')
-        ORDER BY olusturma_zamani DESC, kalite_id DESC;
-    """
-    return read_sql(sql)
-
-@st.cache_data
-def load_anomaly_details():
-    sql = """
-        SELECT
-            kalite_id,
-            seviye,
-            kural_kodu,
-            kategori,
-            sayfa_adi,
-            yil,
-            ay,
-            kurum_kodu,
-            birim_adi,
-            ilce_adi,
-            metrik_adi,
-            metrik_deger,
-            q1,
-            q3,
-            median,
-            threshold,
-            mesaj,
-            kaynak_dosya,
-            olusturma_zamani
-        FROM hastane_analiz.v_kalite_anomali_aktif
-        ORDER BY olusturma_zamani DESC, kalite_id DESC;
-    """
-    return read_sql(sql)
-
-@st.cache_data
-def load_ratio_anomalies():
-    sql = """
-        SELECT *
-        FROM hastane_analiz.v_kalite_ratio_detay
-        ORDER BY olusturma_zamani DESC, kalite_id DESC;
-    """
-    return read_sql(sql)
-
-
-
-
-# ---------------------------------------------------------
-#  UI
-# ---------------------------------------------------------
-
+# =========================================================
+# MAIN
+# =========================================================
 def main():
-    st.set_page_config(page_title="Acil Hizmetler & Veri Kalitesi", layout="wide")
+    st.set_page_config(page_title="Acil Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-    st.title("🏥 Hastane Analiz Dashboard")
+    inject_css()
+    topbar()
 
-    tab_acil, tab_kalite = st.tabs(["🚑 Acil Hizmetler", "🧪 Veri Kalitesi"])
+    df_raw = load_acil_data()
+    if df_raw.empty:
+        st.warning("View boş: hastane_analiz.v_acil_oran veri döndürmüyor.")
+        return
 
-    # =======================================================
-    #  TAB 1: ACİL DASHBOARD
-    # =======================================================
-    with tab_acil:
-        st.subheader("Acil Hizmetler Dashboard (Pilot)")
+    df = filter_block(df_raw)
+    if df.empty:
+        st.warning("Seçili filtrelerde veri bulunamadı.")
+        return
 
-        # ---------------- Filtre verilerini çek ----------------
-        df_periods, df_metrics, df_districts = load_filter_data()
+    tab_ozet, tab_detay = st.tabs(["📌 Özet", "🔎 Detay"])
 
-        if df_periods.empty or df_metrics.empty:
-            st.warning("ACİL kategorisi için henüz veri veya tanımlı metrik bulunamadı.")
-            return
+    with tab_ozet:
+        kpi_row(df)
+        st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
 
-        # ---------------- Sol panel: Filtreler -----------------
-        with st.sidebar:
-            st.header("Filtreler")
+        st.markdown("<div class='card'><div class='section-title'>Aylara Göre Trend (Toplam • Kırmızı • Sarı • Yeşil)</div>", unsafe_allow_html=True)
+        trend_block(df)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            # Yıl & Ay
-            yil_list = sorted(df_periods["yil"].unique(), reverse=True)
-            selected_yil = st.selectbox("Yıl", yil_list, index=0)
+        st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
 
-            ay_list = sorted(
-                df_periods.loc[df_periods["yil"] == selected_yil, "ay"].unique()
-            )
-            selected_ay = st.selectbox("Ay", ay_list)
+        st.markdown("<div class='card'><div class='section-title'>Hastane Sıralama Tablosu</div>", unsafe_allow_html=True)
+        ranking_table(df)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            # Metrik seçimi (metrik_adi göster, metrik_kodu ile çalış)
-            metric_options = {
-                row["metrik_adi"]: (row["metrik_kodu"], row["veri_tipi"])
-                for _, row in df_metrics.iterrows()
-            }
+        st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
 
-            metric_name = st.selectbox("Metrik", list(metric_options.keys()))
-            selected_metric_code, selected_metric_type = metric_options[metric_name]
+        # ✅ Validation tablo + export burada
+        validation_table_block(df, kategori="ACIL")
 
-            # İlçe çoklu seçim
-            ilce_list = df_districts["ilce_adi"].tolist()
-            selected_districts = st.multiselect(
-                "İlçe (boş bırakılırsa hepsi)",
-                ilce_list,
-                default=[]
-            )
-
-        # ---------------- Veri çek -----------------
-        df = load_metric_data(selected_yil, selected_ay,
-                              selected_metric_code,
-                              selected_districts or None)
-
-        if df.empty:
-            st.info("Seçilen filtrelere göre veri bulunamadı.")
-        else:
-            # ---------------- Üst metrik kartları -----------------
-            col1, col2, col3 = st.columns(3)
-
-            if selected_metric_type.upper() == "BOOLEAN":
-                # Var/Yok metrikleri için: değer > 0 olan hastane sayısı
-                var_hastane_sayisi = (df["toplam_deger"] > 0).sum()
-                toplam_hastane_sayisi = df["birim_adi"].nunique()
-
-                with col1:
-                    st.metric("Var olan hastane sayısı", f"{var_hastane_sayisi}")
-                with col2:
-                    st.metric("Toplam hastane sayısı", f"{toplam_hastane_sayisi}")
-                with col3:
-                    oran = (
-                        100 * var_hastane_sayisi / toplam_hastane_sayisi
-                        if toplam_hastane_sayisi > 0
-                        else 0
-                    )
-                    st.metric("Oran (%)", f"{oran:.1f}")
-            else:
-                # Numerik metrikler için
-                total_value = float(df["toplam_deger"].sum())
-                hospital_count = df["birim_adi"].nunique()
-                district_count = df["ilce_adi"].nunique()
-
-                with col1:
-                    st.metric("Toplam Değer", f"{total_value:,.0f}".replace(",", "."))
-                with col2:
-                    st.metric("Hastane Sayısı", f"{hospital_count}")
-                with col3:
-                    st.metric("İlçe Sayısı", f"{district_count}")
-
-            st.markdown("---")
-
-            # ---------------- İlçe bazlı özet + grafik -----------------
-            st.subheader("İlçe Bazlı Toplam Değer")
-
-            df_ilce = (
-                df.groupby("ilce_adi", as_index=False)["toplam_deger"]
-                .sum()
-                .sort_values("toplam_deger", ascending=False)
-            )
-
-            col_table, col_chart = st.columns((1, 2))
-
-            with col_table:
-                st.dataframe(df_ilce, use_container_width=True)
-
-            with col_chart:
-                # Bar chart için index'e ilçe_adi koy
-                chart_data = df_ilce.set_index("ilce_adi")["toplam_deger"]
-                st.bar_chart(chart_data)
-
-            st.markdown("---")
-
-            # ---------------- Yıllık trend (tüm yıllar) -----------------
-            st.subheader("Yıllara Göre Trend (Tüm Dönemler)")
-
-            df_trend = load_trend_data(selected_metric_code,
-                                       selected_districts or None)
-
-            if df_trend.empty:
-                st.info("Trend grafiği için yeterli veri bulunamadı.")
-            else:
-                trend_series = df_trend.set_index("period")["toplam_deger"]
-                st.line_chart(trend_series)
-
-            st.markdown("---")
-
-            # ---------------- Hastane detay tablosu -----------------
-            st.subheader("Hastane Detayları")
-
-            df_detail = df[["yil", "ay", "ilce_adi", "birim_adi",
-                            "metrik_kodu", "toplam_deger"]].copy()
-            df_detail = df_detail.sort_values(["ilce_adi", "birim_adi"])
-
-            st.dataframe(df_detail, use_container_width=True)
-
-    # =======================================================
-    #  TAB 2: VERİ KALİTESİ
-    # =======================================================
-    with tab_kalite:
-        st.subheader("Veri Kalitesi")
-
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📁 Dosya Özeti",
-            "❌ Son FATAL Kayıtlar",
-            "📉 Negatif Değerler",
-            "📊 Anomali Detayları",
-            "📐 Oran Anomalileri",
-        ])
-
-
-        # ---- Dosya Özeti ----
-        with tab1:
-            df_ozet = load_quality_summary()
-            if df_ozet.empty:
-                st.info("Şu ana kadar kalite kaydı bulunamadı.")
-            else:
-                kategori_sec = st.multiselect(
-                    "Kategori filtrele",
-                    sorted(df_ozet["kategori"].dropna().unique()),
-                    default=list(sorted(df_ozet["kategori"].dropna().unique())),
-                )
-
-                df_filtre = df_ozet.copy()
-                if kategori_sec:
-                    df_filtre = df_filtre[df_filtre["kategori"].isin(kategori_sec)]
-
-                st.dataframe(df_filtre, use_container_width=True)
-
-        # ---- Son FATAL Kayıtlar ----
-        with tab2:
-            df_fatal = load_quality_fatal()
-            if df_fatal.empty:
-                st.success("FATAL hata kaydı bulunmuyor 🎉")
-            else:
-                st.dataframe(df_fatal, use_container_width=True)
-
-        # ---- Negatif Değerler ----
-        with tab3:
-            df_neg = load_quality_negative()
-            if df_neg.empty:
-                st.success("Negatif metrik değeri bulunmuyor.")
-            else:
-                st.dataframe(df_neg, use_container_width=True)
-
-                # ---- TAB 4: Anomali Detayları ----
-        with tab4:
-            st.subheader("Anomali Detayları (WARN / FATAL)")
-
-            df_anom = load_anomaly_details()
-
-            if df_anom.empty:
-                st.success("Şu an kayıtlı anomali (WARN/FATAL) bulunmuyor 🎉")
-            else:
-                # --- Filtreler ---
-                col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-
-                with col_f1:
-                    sev_list = sorted(df_anom["seviye"].unique())
-                    sev_filter = st.multiselect(
-                        "Seviye",
-                        sev_list,
-                        default=sev_list,
-                    )
-
-                with col_f2:
-                    kural_list = sorted(df_anom["kural_kodu"].unique())
-                    kural_filter = st.multiselect(
-                        "Kural Kodu",
-                        kural_list,
-                        default=kural_list,
-                    )
-
-                with col_f3:
-                    metrik_list = sorted(
-                        [m for m in df_anom["metrik_adi"].dropna().unique()]
-                    )
-                    metrik_filter = st.multiselect(
-                        "Metrik",
-                        metrik_list,
-                        default=[],
-                    )
-
-                with col_f4:
-                    birim_list = sorted(
-                        [b for b in df_anom["birim_adi"].dropna().unique()]
-                    )
-                    birim_filter = st.multiselect(
-                        "Hastane",
-                        birim_list,
-                        default=[],
-                    )
-
-                df_f = df_anom.copy()
-                if sev_filter:
-                    df_f = df_f[df_f["seviye"].isin(sev_filter)]
-                if kural_filter:
-                    df_f = df_f[df_f["kural_kodu"].isin(kural_filter)]
-                if metrik_filter:
-                    df_f = df_f[df_f["metrik_adi"].isin(metrik_filter)]
-                if birim_filter:
-                    df_f = df_f[df_f["birim_adi"].isin(birim_filter)]
-
-                # --- Üstte özet kartlar ---
-                col_m1, col_m2, col_m3 = st.columns(3)
-                toplam = len(df_f)
-                warn_say = (df_f["seviye"] == "WARN").sum()
-                fatal_say = (df_f["seviye"] == "FATAL").sum()
-
-                with col_m1:
-                    st.metric("Toplam Anomali", f"{toplam}")
-                with col_m2:
-                    st.metric("WARN Sayısı", f"{warn_say}")
-                with col_m3:
-                    st.metric("FATAL Sayısı", f"{fatal_say}")
-
-                st.markdown("---")
-
-        with tab5:
-            st.subheader("Oran Anomalileri (RATIO_*)")
-
-            df_ratio = load_ratio_anomalies()
-
-            if df_ratio.empty:
-                st.success("Şu an kayıtlı oran anomalisı bulunmuyor 🎉")
-            else:
-                # Filtreler
-                col1, col2, col3, col4 = st.columns(4)
-
-                with col1:
-                    kural_list = sorted(df_ratio["kural_kodu"].unique())
-                    kural_filter = st.multiselect(
-                        "Kural Kodu",
-                        kural_list,
-                        default=kural_list,
-                    )
-
-                with col2:
-                    ilce_list = sorted(df_ratio["ilce_adi"].dropna().unique())
-                    ilce_filter = st.multiselect(
-                        "İlçe",
-                        ilce_list,
-                        default=[],
-                    )
-
-                with col3:
-                    birim_list = sorted(df_ratio["birim_adi"].dropna().unique())
-                    birim_filter = st.multiselect(
-                        "Hastane",
-                        birim_list,
-                        default=[],
-                    )
-
-                with col4:
-                    yil_list = sorted(df_ratio["yil"].dropna().unique(), reverse=True)
-                    yil_filter = st.multiselect(
-                        "Yıl",
-                        yil_list,
-                        default=[],
-                    )
-
-                df_f = df_ratio.copy()
-                if kural_filter:
-                    df_f = df_f[df_f["kural_kodu"].isin(kural_filter)]
-                if ilce_filter:
-                    df_f = df_f[df_f["ilce_adi"].isin(ilce_filter)]
-                if birim_filter:
-                    df_f = df_f[df_f["birim_adi"].isin(birim_filter)]
-                if yil_filter:
-                    df_f = df_f[df_f["yil"].isin(yil_filter)]
-
-                # Özet kartlar
-                colm1, colm2 = st.columns(2)
-                with colm1:
-                    st.metric("Toplam Oran Uyarısı", len(df_f))
-                with colm2:
-                    st.metric("Farklı Hastane Sayısı", df_f["birim_adi"].nunique())
-
-                st.markdown("---")
-
-                # Gösterilecek tablo
-                df_show = df_f[[
-                    "olusturma_zamani",
-                    "seviye",
-                    "kural_kodu",
-                    "yil",
-                    "ay",
-                    "ilce_adi",
-                    "birim_adi",
-                    "num_metrik_adi",
-                    "den_metrik_adi",
-                    "num_value",
-                    "den_value",
-                    "ratio",
-                    "min_oran",
-                    "max_oran",
-                    "mesaj",
-                    "kaynak_dosya",
-                ]].sort_values("olusturma_zamani", ascending=False)
-
-                st.dataframe(df_show, use_container_width=True)
-
-                # --- Tablo için birkaç hesaplanmış kolon ---
-                df_show = df_f.copy()
-                # median > 0 ise "kaç katı" bilgisi
-                def oran(row):
-                    med = row.get("median")
-                    val = row.get("metrik_deger")
-                    if med is None or med == 0 or val is None:
-                        return None
-                    return round(float(val) / float(med), 2)
-
-                df_show["median_kati"] = df_show.apply(oran, axis=1)
-
-                df_show = df_show[[
-                    "olusturma_zamani",
-                    "seviye",
-                    "kural_kodu",
-                    "kategori",
-                    "yil",
-                    "ay",
-                    "ilce_adi",
-                    "birim_adi",
-                    "metrik_adi",
-                    "metrik_deger",
-                    "median",
-                    "threshold",
-                    "median_kati",
-                    "mesaj",
-                    "kaynak_dosya",
-                ]].sort_values("olusturma_zamani", ascending=False)
-
-                st.dataframe(df_show, use_container_width=True)
-
-                # ---- Excel export: WARN/FATAL kayıtları ----
-        st.markdown("---")
-        st.subheader("Hatalı Kayıtları Excel Olarak İndir")
-
-        df_issues = load_quality_issues()
-
-        if df_issues.empty:
-            st.info("Şu an WARN veya FATAL kayıt bulunmuyor, Excel oluşturulacak veri yok.")
-        else:
-            df_export = df_issues.copy()
-
-            # timezone'lu datetime kolonlarını naive yap
-            dt_cols = df_export.select_dtypes(include=["datetimetz"]).columns
-            if len(dt_cols) > 0:
-                df_export[dt_cols] = df_export[dt_cols].apply(
-                    lambda s: s.dt.tz_localize(None)
-                )
-
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                df_export.to_excel(writer, index=False, sheet_name="Hatalar")
-
-            st.download_button(
-                "Hatalı Satırları Excel Olarak İndir",
-                data=buffer.getvalue(),
-                file_name="veri_kalitesi_hatalar.xlsx",
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
-            )
+    with tab_detay:
+        st.info("Detay sekmesini istersen DOGUM’daki gibi heatmap / kapasite / karşılaştırma bloklarıyla büyütürüz.")
 
 
 if __name__ == "__main__":

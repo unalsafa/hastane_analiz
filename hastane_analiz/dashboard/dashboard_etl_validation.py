@@ -1,9 +1,9 @@
 # hastane_analiz/dashboard/dashboard_etl_validation.py
-
 from __future__ import annotations
 
 import io
 from pathlib import Path
+from typing import Iterable
 
 import pandas as pd
 import streamlit as st
@@ -11,12 +11,13 @@ import streamlit as st
 from hastane_analiz.db.connection import get_connection
 from hastane_analiz.etl.runner import run_etl_for_folder
 from hastane_analiz.validation.yearly_outliers import run_yearly_outlier_scan
-from hastane_analiz.validation.promote_to_fact import promote_month_to_fact
-from hastane_analiz.validation.promote_to_fact import get_issue_summary
+from hastane_analiz.validation.promote_to_fact import promote_month_to_fact, get_issue_summary
 
 
+# ==============================
+# Rule code grupları (UI filtreleme)
+# ==============================
 
-# Hangi rule_code'lar hangi gruba giriyor?
 BASE_RULE_CODES = [
     "NEGATIVE_VALUE",
     "METRIC_NOT_NUMERIC",
@@ -33,15 +34,45 @@ OUTLIER_RULE_CODES = [
 
 
 # ==============================
-# Yardımcı fonksiyonlar
+# Yardımcılar
 # ==============================
 
-def load_etl_kalite_for_period(kategori: str, yil: int, ay: int) -> pd.DataFrame:
-    """
-    etl_kalite_sonuc tablosundan, seçilen kategori + yil/ay için
-    (hem yıl/ay kolonuna hem de dosya adına göre) ETL validation kayıtlarını çeker.
-    """
+def df_to_excel_download(df: pd.DataFrame, sheet_name: str, file_name: str):
+    if df.empty:
+        return None, None, None
 
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    data = buffer.getvalue()
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return data, file_name, mime
+
+
+def _normalize_kategori(kategori_ui: str | None) -> str | None:
+    if not kategori_ui:
+        return None
+    k = str(kategori_ui).strip().upper()
+    if k in ("TÜMÜ", "TUMU", "ALL", "HEPSI", "HEPSİ"):
+        return None
+    return k
+
+
+def _kategori_list_or_default(kategori: str | None) -> list[str]:
+    """
+    kategori None ise sistemde en azından bilinen kategoriler döner.
+    İstersen buraya yeni kategori ekleyebilirsin.
+    """
+    known = ["ACIL", "DOGUM"]
+    if kategori is None:
+        return known
+    return [kategori]
+
+
+def load_etl_kalite_for_period(kategori: str | None, yil: int, ay: int) -> pd.DataFrame:
+    """
+    etl_kalite_sonuc tablosundan seçilen (kategori opsiyonel) + yil/ay için kayıtları çeker.
+    """
     like_pattern = f"%{yil}-{ay:02d}%"
 
     sql = """
@@ -64,10 +95,14 @@ def load_etl_kalite_for_period(kategori: str, yil: int, ay: int) -> pd.DataFrame
         FROM hastane_analiz.etl_kalite_sonuc e
         LEFT JOIN hastane_analiz.birim_def b
           ON b.kurum_kodu = e.kurum_kodu
-        WHERE e.kategori = %s
+        WHERE
+          (
+            (%(kategori)s IS NULL)
+            OR (e.kategori = %(kategori)s)
+          )
           AND (
-                (e.yil = %s AND e.ay = %s)
-             OR e.kaynak_dosya LIKE %s
+                (e.yil = %(yil)s AND e.ay = %(ay)s)
+             OR e.kaynak_dosya LIKE %(like_pattern)s
           )
         ORDER BY
             e.seviye DESC,
@@ -79,8 +114,15 @@ def load_etl_kalite_for_period(kategori: str, yil: int, ay: int) -> pd.DataFrame
             e.row_index;
     """
 
+    params = {
+        "kategori": (kategori.upper() if kategori else None),
+        "yil": int(yil),
+        "ay": int(ay),
+        "like_pattern": like_pattern,
+    }
+
     with get_connection() as conn:
-        df = pd.read_sql(sql, conn, params=[kategori.upper(), yil, ay, like_pattern])
+        df = pd.read_sql(sql, conn, params=params)
 
     return df
 
@@ -144,11 +186,9 @@ def load_coverage_table(kategori: str, yil: int) -> pd.DataFrame:
       - Eksik başlık sayısı ve listesi
     """
     if kategori != "ACIL":
-        # Şimdilik sadece ACIL için kural tablomuz olduğunu varsayalım
         return pd.DataFrame()
 
     with get_connection() as conn:
-        # Beklenen metrikler (acil_kural_def)
         df_expected = pd.read_sql(
             """
             SELECT DISTINCT metrik_yolu AS metrik_adi
@@ -165,7 +205,6 @@ def load_coverage_table(kategori: str, yil: int) -> pd.DataFrame:
         expected_set = set(df_expected["metrik_adi"].astype(str))
         expected_count = len(expected_set)
 
-        # Gerçek gelen metrikler (raw_veri/v_metrik_aylik)
         df_actual = pd.read_sql(
             """
             SELECT
@@ -181,7 +220,6 @@ def load_coverage_table(kategori: str, yil: int) -> pd.DataFrame:
             params=[kategori, yil],
         )
 
-        # Kurum adları
         df_birim = pd.read_sql(
             """
             SELECT DISTINCT
@@ -203,10 +241,7 @@ def load_coverage_table(kategori: str, yil: int) -> pd.DataFrame:
         eksik_sayi = len(missing)
 
         if missing:
-            if len(missing) > 15:
-                eksik_basliklar = ", ".join(missing[:15]) + " ..."
-            else:
-                eksik_basliklar = ", ".join(missing)
+            eksik_basliklar = ", ".join(missing[:15]) + (" ..." if len(missing) > 15 else "")
         else:
             eksik_basliklar = ""
 
@@ -223,8 +258,6 @@ def load_coverage_table(kategori: str, yil: int) -> pd.DataFrame:
         )
 
     df_cov = pd.DataFrame(rows)
-
-    # Kurum adlarını ekle
     df_cov = df_cov.merge(df_birim, how="left", on="kurum_kodu")
     df_cov = df_cov[
         [
@@ -242,20 +275,47 @@ def load_coverage_table(kategori: str, yil: int) -> pd.DataFrame:
     return df_cov.sort_values(["yil", "ay", "kurum_adi"])
 
 
-def df_to_excel_download(df: pd.DataFrame, sheet_name: str, file_name: str):
+def get_available_periods_from_raw(kategori: str | None = None) -> pd.DataFrame:
     """
-    Verilen DataFrame'i excel'e çevirip Streamlit download_button için
-    (data, file_name, mime) döner.
+    raw_veri üzerinden mevcut dönemleri listeler.
+    kategori None ise tüm kategoriler gelir.
     """
-    if df.empty:
-        return None, None, None
+    sql = """
+        SELECT DISTINCT
+            kategori,
+            yil,
+            ay
+        FROM hastane_analiz.raw_veri
+        WHERE (%(kategori)s IS NULL) OR (kategori = %(kategori)s)
+        ORDER BY kategori, yil, ay;
+    """
+    params = {"kategori": (kategori.upper() if kategori else None)}
+    with get_connection() as conn:
+        df = pd.read_sql(sql, conn, params=params)
+    return df
 
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name=sheet_name)
-    data = buffer.getvalue()
-    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    return data, file_name, mime
+
+def _promote_many(period_rows: Iterable[tuple[str, int, int]]) -> pd.DataFrame:
+    """
+    period_rows: (kategori, yil, ay)
+    """
+    results = []
+    for kat, yil, ay in period_rows:
+        try:
+            promote_month_to_fact(kategori=kat, yil=int(yil), ay=int(ay))
+            results.append(
+                {"kategori": kat, "yil": int(yil), "ay": int(ay), "durum": "OK", "hata": ""}
+            )
+        except RuntimeError as e:
+            # promote_to_fact bilinçli bloklayabilir (FATAL vs.)
+            results.append(
+                {"kategori": kat, "yil": int(yil), "ay": int(ay), "durum": "BLOCKED", "hata": str(e)}
+            )
+        except Exception as e:
+            results.append(
+                {"kategori": kat, "yil": int(yil), "ay": int(ay), "durum": "ERROR", "hata": repr(e)}
+            )
+    return pd.DataFrame(results)
 
 
 # ==============================
@@ -264,32 +324,32 @@ def df_to_excel_download(df: pd.DataFrame, sheet_name: str, file_name: str):
 
 def main():
     st.set_page_config(page_title="ETL & Validasyon", layout="wide")
-
     st.title("ETL & Validasyon")
 
-    # Üst filtreler
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        kategori = st.selectbox("Kategori", ["ACIL", "DOGUM"], index=0)
-    with col2:
-        yil = st.number_input("Yıl", min_value=2020, max_value=2100, value=2025, step=1)
-    with col3:
-        ay = st.number_input("Ay", min_value=1, max_value=12, value=1, step=1)
+    st.caption(
+        "Yeni akış: ETL (yıl/ay yok) → Yıllık validation (yıl seçilir) → Fact’e aktarma (aylık ya da tümünü). "
+        "Kategoriler opsiyonel: 'TÜMÜ' seçebilirsin."
+    )
 
     st.markdown("---")
 
-    # 1) Veri yükleme bloğu
-    st.header("1. Veri Yükleme")
+    # ------------------------------------------------------------------
+    # 1) ETL (kategori + yıl/ay yok)
+    # ------------------------------------------------------------------
+    st.header("1) Veri Yükleme (ETL) — Yıl/Ay YOK")
 
     st.write(
-        "Bu bölümde seçtiğiniz klasördeki Excel dosyaları `raw_veri` tablosuna yüklenir. "
-        "Genelde klasör, tek bir aya ait dosyaları içerir (örn. `C:\\veri\\2025_02`)."
+        "Bu bölümde seçtiğin klasördeki **tüm Excel dosyaları** okunur. "
+        "Yıl/Ay bilgisi Excel içinden alınır ve `raw_veri` + `etl_kalite_sonuc` tablolarına yazılır."
     )
 
-    default_folder = ""
-    folder_input = st.text_input("Kaynak klasör yolu", value=default_folder)
+    folder_input = st.text_input(
+        "Kaynak klasör yolu",
+        value="",
+        help="Bu klasördeki TÜM Excel dosyaları okunur. Yıl/Ay Excel içinden alınır.",
+    )
 
-    if st.button("Klasörden veriyi yükle (raw_veri)"):
+    if st.button("Klasörden tüm verileri yükle (ETL)"):
         if not folder_input:
             st.error("Lütfen bir klasör yolu girin.")
         else:
@@ -297,50 +357,63 @@ def main():
             if not folder_path.exists():
                 st.error(f"Klasör bulunamadı: {folder_path}")
             else:
-                st.info(f"ETL çalışıyor... Klasör: {folder_path}")
+                st.info("ETL çalışıyor... (dosya sayısına göre sürebilir)")
                 try:
                     run_etl_for_folder(str(folder_path))
-                    st.success("ETL tamamlandı, veriler raw_veri tablosuna yazıldı.")
+                    st.success("ETL tamamlandı. Veriler `raw_veri` + `etl_kalite_sonuc` tablolarına yazıldı.")
                 except Exception as e:
                     st.error("ETL sırasında hata oluştu.")
                     st.exception(e)
 
     st.markdown("---")
 
-    # 2) Yıllık sapma taraması
-    st.header("2. Yıllık Sapma Taraması (Outlier Ayları Bul)")
+    # ------------------------------------------------------------------
+    # 2) Yıllık Outlier Tarama (kategori opsiyonel)
+    # ------------------------------------------------------------------
+    st.header("2) Yıllık Sapma Taraması (Outlier / Missing Month)")
 
-    st.write(
-        "Seçtiğiniz kategori + yıl için tüm 12 ay taranır; "
-        "anormal derecede yüksek/düşük aylar ve eksik aylar validation_issue tablosuna yazılır."
-    )
+    col2a, col2b = st.columns([2, 1])
+    with col2a:
+        kategori_ui = st.selectbox("Kategori", ["TÜMÜ", "ACIL", "DOGUM"], index=0)
+    with col2b:
+        yil_out = st.number_input("Yıl", min_value=2020, max_value=2100, value=2025, step=1)
 
-    col_run1, col_run2 = st.columns([1, 2])
-    with col_run1:
-        if st.button("Bu yıl için sapma taramasını çalıştır"):
+    kategori_out = _normalize_kategori(kategori_ui)
+
+    if st.button("Bu yıl için sapma taramasını çalıştır"):
+        cats = _kategori_list_or_default(kategori_out)
+        st.info(f"Çalışacak kategoriler: {', '.join(cats)}")
+        for kat in cats:
             try:
-                run_id = run_yearly_outlier_scan(kategori=kategori, yil=int(yil))
-                st.success(f"Sapma taraması tamamlandı. run_id = {run_id}")
+                run_id = run_yearly_outlier_scan(kategori=kat, yil=int(yil_out))
+                st.success(f"{kat} → tamamlandı. run_id = {run_id}")
             except Exception as e:
-                st.error("Sapma taraması sırasında hata oluştu.")
+                st.error(f"{kat} → hata oluştu.")
                 st.exception(e)
-
-    latest_run_id = _get_latest_validation_run_id(kategori, int(yil))
-    with col_run2:
-        if latest_run_id is not None:
-            st.info(f"Bu kategori+yıl için son validation_run_id: {latest_run_id}")
-        else:
-            st.info("Bu kategori+yıl için henüz validation_run kaydı bulunamadı.")
 
     st.markdown("---")
 
-    # 3) Detay hata listesi
-    st.header("3. Hata Detayları (Kurum Kodu / Kurum Adı / Hatalı Veri)")
+    # ------------------------------------------------------------------
+    # 3) Validation Issue Detayları (kategori zorunlu çünkü validation_run kategoriyle bağlı)
+    # ------------------------------------------------------------------
+    st.header("3) Hata Detayları (validation_issue)")
 
-    df_issues = load_issue_details(kategori, int(yil), ay=None)
+    col3a, col3b = st.columns([2, 1])
+    with col3a:
+        kategori_det = st.selectbox("Kategori (issue detayları için)", ["ACIL", "DOGUM"], index=0)
+    with col3b:
+        yil_det = st.number_input("Yıl (issue)", min_value=2020, max_value=2100, value=2025, step=1, key="yil_det")
+
+    latest_run_id = _get_latest_validation_run_id(kategori_det, int(yil_det))
+    if latest_run_id is None:
+        st.info("Bu kategori+yıl için henüz validation_run kaydı yok. (Önce 2. adımı çalıştır.)")
+        df_issues = pd.DataFrame()
+    else:
+        st.info(f"Son validation_run_id: {latest_run_id}")
+        df_issues = load_issue_details(kategori_det, int(yil_det), ay=None)
 
     if df_issues.empty:
-        st.info("Bu kategori+yıl için kayıtlı hata bulunamadı (veya henüz validation_run yok).")
+        st.info("Kayıt bulunamadı.")
     else:
         col_a, col_b, col_c, col_d = st.columns(4)
         total_issues = len(df_issues)
@@ -349,7 +422,7 @@ def main():
         info_count = (df_issues["severity"] == "INFO").sum()
 
         with col_a:
-            st.metric("Toplam Issue", total_issues)
+            st.metric("Toplam Issue", int(total_issues))
         with col_b:
             st.metric("WARN", int(warn_count))
         with col_c:
@@ -395,149 +468,164 @@ def main():
         excel_all, name_all, mime_all = df_to_excel_download(
             df_filtered,
             sheet_name="Hatalar",
-            file_name=f"hatalar_{kategori}_{yil}_filtreli.xlsx",
+            file_name=f"hatalar_{kategori_det}_{yil_det}_filtreli.xlsx",
         )
 
         df_base = df_filtered[df_filtered["rule_code"].isin(BASE_RULE_CODES)]
         excel_base, name_base, mime_base = df_to_excel_download(
             df_base,
             sheet_name="TemelValidation",
-            file_name=f"hatalar_{kategori}_{yil}_temel.xlsx",
+            file_name=f"hatalar_{kategori_det}_{yil_det}_temel.xlsx",
         )
 
         df_out = df_filtered[df_filtered["rule_code"].isin(OUTLIER_RULE_CODES)]
         excel_out, name_out, mime_out = df_to_excel_download(
             df_out,
             sheet_name="SapmaEksikAy",
-            file_name=f"hatalar_{kategori}_{yil}_sapma.xlsx",
+            file_name=f"hatalar_{kategori_det}_{yil_det}_sapma.xlsx",
         )
 
         col_x1, col_x2, col_x3 = st.columns(3)
         with col_x1:
             if excel_all:
-                st.download_button(
-                    "Görünen (filtreli) hataları indir",
-                    data=excel_all,
-                    file_name=name_all,
-                    mime=mime_all,
-                )
+                st.download_button("Görünen (filtreli) hataları indir", data=excel_all, file_name=name_all, mime=mime_all)
         with col_x2:
             if excel_base:
-                st.download_button(
-                    "Sadece TEMEL validation hataları",
-                    data=excel_base,
-                    file_name=name_base,
-                    mime=mime_base,
-                )
+                st.download_button("Sadece TEMEL validation hataları", data=excel_base, file_name=name_base, mime=mime_base)
         with col_x3:
             if excel_out:
-                st.download_button(
-                    "Sadece SAPMA / EKSİK AY hataları",
-                    data=excel_out,
-                    file_name=name_out,
-                    mime=mime_out,
-                )
+                st.download_button("Sadece SAPMA / EKSİK AY hataları", data=excel_out, file_name=name_out, mime=mime_out)
 
     st.markdown("---")
 
-    # 4) Kapsama / Eksik başlıklar
-    st.header("4. Kapsama ve Eksik Başlıklar")
+    # ------------------------------------------------------------------
+    # 4) Kapsama / Eksik Başlıklar (şimdilik ACIL)
+    # ------------------------------------------------------------------
+    st.header("4) Kapsama ve Eksik Başlıklar")
 
-    df_cov = load_coverage_table(kategori, int(yil))
+    col4a, col4b = st.columns([2, 1])
+    with col4a:
+        kategori_cov = st.selectbox("Kategori (kapsama)", ["ACIL", "DOGUM"], index=0, key="kategori_cov")
+    with col4b:
+        yil_cov = st.number_input("Yıl (kapsama)", min_value=2020, max_value=2100, value=2025, step=1, key="yil_cov")
+
+    df_cov = load_coverage_table(kategori_cov, int(yil_cov))
 
     if df_cov.empty:
-        st.info("Bu kategori+yıl için kapsama verisi bulunamadı (veya ACIL dışı kategori seçili).")
+        st.info("Kapsama verisi bulunamadı (veya ACIL dışı kategori seçili).")
     else:
         st.dataframe(df_cov, use_container_width=True)
-
         excel_data2, excel_name2, excel_mime2 = df_to_excel_download(
             df_cov,
             sheet_name="Kapsama",
-            file_name=f"kapsama_{kategori}_{yil}.xlsx",
+            file_name=f"kapsama_{kategori_cov}_{yil_cov}.xlsx",
         )
         if excel_data2:
-            st.download_button(
-                "Kapsama tablosunu Excel olarak indir",
-                data=excel_data2,
-                file_name=excel_name2,
-                mime=excel_mime2,
-            )
+            st.download_button("Kapsama tablosunu Excel olarak indir", data=excel_data2, file_name=excel_name2, mime=excel_mime2)
 
     st.markdown("---")
 
-    
+    # ------------------------------------------------------------------
+    # 5) Fact’e Aktarım (aylık + tümünü)
+    # ------------------------------------------------------------------
+    st.header("5) Ana Veriye Aktarım (fact_metrik_aylik) — Aylık / Tümü")
 
+    col5a, col5b, col5c = st.columns([2, 1, 1])
+    with col5a:
+        kategori_fact_ui = st.selectbox("Kategori", ["TÜMÜ", "ACIL", "DOGUM"], index=0, key="kategori_fact_ui")
+    with col5b:
+        yil_fact = st.number_input("Yıl", min_value=2020, max_value=2100, value=2025, step=1, key="yil_fact")
+    with col5c:
+        ay_fact = st.number_input("Ay", min_value=1, max_value=12, value=1, step=1, key="ay_fact")
 
-    # 5) Ana veriye (fact) aktarma
-    st.header("5. Ana Veriye Aktarım (fact_metrik_aylik)")
+    kategori_fact = _normalize_kategori(kategori_fact_ui)
 
-    # 5 için özet
-    summary = get_issue_summary(kategori, int(yil), int(ay))
-    col_s1, col_s2, col_s3 = st.columns(3)
-    with col_s1:
-        st.metric("FATAL (ETL)", summary.get("FATAL", 0))
-    with col_s2:
-        st.metric("WARN (ETL)", summary.get("WARN", 0))
-    with col_s3:
-        st.metric("INFO (ETL)", summary.get("INFO", 0))
-        
+    st.subheader("5.1) Seçili Ay için Özet (ETL Issue Summary)")
+    if kategori_fact is None:
+        st.info("Özet için kategori gerekir. 'TÜMÜ' yerine tek kategori seç.")
+    else:
+        summary = get_issue_summary(kategori_fact, int(yil_fact), int(ay_fact))
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("FATAL (ETL)", int(summary.get("FATAL", 0)))
+        with col_s2:
+            st.metric("WARN (ETL)", int(summary.get("WARN", 0)))
+        with col_s3:
+            st.metric("INFO (ETL)", int(summary.get("INFO", 0)))
+
     st.write(
-        "Seçili yıl ve ay için, validation sonuçlarına göre bu ayı ana veri tablosu "
-        "`fact_metrik_aylik` içine alabilirsiniz. `promote_to_fact` fonksiyonu içinde "
-        "kritik hatalar varsa ayı almama kontrolü zaten mevcut."
+        "Aylık aktarım, seçili (kategori+yıl+ay) için çalışır. "
+        "Tümünü aktar ise raw_veri’de bulunan tüm dönemleri sırayla dener."
     )
 
-    col_fact1, col_fact2 = st.columns(2)
-    with col_fact1:
+    colp1, colp2 = st.columns(2)
+
+    with colp1:
         if st.button("Bu ayı ana veriye AL (fact'e yaz)"):
-            try:
-                promote_month_to_fact(kategori=kategori, yil=int(yil), ay=int(ay))
-                st.success(
-                    f"{yil}-{int(ay):02d} için fact_metrik_aylik güncellendi."
+            if kategori_fact is None:
+                st.error("Aylık aktarım için kategori seçmelisin (TÜMÜ olamaz).")
+            else:
+                try:
+                    promote_month_to_fact(kategori=kategori_fact, yil=int(yil_fact), ay=int(ay_fact))
+                    st.success(f"{kategori_fact} → {yil_fact}-{int(ay_fact):02d} için fact_metrik_aylik güncellendi.")
+                except RuntimeError as e:
+                    st.error(str(e))
+                except Exception as e:
+                    st.error("Ana veriye aktarım sırasında beklenmeyen bir hata oluştu.")
+                    st.exception(e)
+
+    with colp2:
+        if st.button("TÜMÜNÜ aktar (raw_veri’deki tüm dönemler)"):
+            # kategori_fact None ise tüm kategoriler, değilse o kategori
+            df_periods = get_available_periods_from_raw(kategori_fact)
+            if df_periods.empty:
+                st.info("raw_veri içinde aktarılacak dönem bulunamadı.")
+            else:
+                st.info(f"Bulunan dönem sayısı: {len(df_periods)}")
+                periods = [(r["kategori"], int(r["yil"]), int(r["ay"])) for _, r in df_periods.iterrows()]
+                df_res = _promote_many(periods)
+                st.dataframe(df_res, use_container_width=True)
+
+                excel_res, name_res, mime_res = df_to_excel_download(
+                    df_res,
+                    sheet_name="PromoteResults",
+                    file_name="promote_results.xlsx",
                 )
-            except RuntimeError as e:
-                # Bizim bilinçli fırlattığımız hata (FATAL varken geçirme)
-                st.error(str(e))
-            except Exception as e:
-                # Beklenmeyen başka bir hata olursa
-                st.error("Ana veriye aktarım sırasında beklenmeyen bir hata oluştu.")
-                st.exception(e)
+                if excel_res:
+                    st.download_button("Aktarım sonuçlarını Excel indir", data=excel_res, file_name=name_res, mime=mime_res)
 
-    with col_fact2:
-        st.info(
-            "Eğer bu ayı ana veriye ALMAMAK istiyorsanız, hiçbir şey yapmayın; "
-            "veri sadece raw_veri ve validation_issue'da kalır. Hataları "
-            "yukarıdan Excel olarak indirebilirsiniz."
-        )
+    st.markdown("---")
 
+    # ------------------------------------------------------------------
+    # 6) ETL Temel Validation Sonuçları (etl_kalite_sonuc)
+    # ------------------------------------------------------------------
+    st.header("6) ETL Temel Validation Sonuçları (etl_kalite_sonuc)")
 
-    # 6) ETL temel validation sonuçları (etl_kalite_sonuc)
-    st.header("6. ETL Temel Validation Sonuçları (etl_kalite_sonuc)")
+    col6a, col6b, col6c = st.columns([2, 1, 1])
+    with col6a:
+        kategori_etl_ui = st.selectbox("Kategori", ["TÜMÜ", "ACIL", "DOGUM"], index=0, key="kategori_etl_ui")
+    with col6b:
+        yil_etl = st.number_input("Yıl", min_value=2020, max_value=2100, value=2025, step=1, key="yil_etl")
+    with col6c:
+        ay_etl = st.number_input("Ay", min_value=1, max_value=12, value=1, step=1, key="ay_etl")
 
-    st.write(
-        "Bu bölümde, ETL sırasında çalışan kuralların (RANGE, TS_MEAN, "
-        "SUM_EQ, BOOLEAN_CHANGE, ZERO_WHILE_OTHERS_POSITIVE, METRIC_OUTLIER_HIGH vb.) "
-        "ürettiği kayıtları görürsünüz. Kayıtlar `etl_kalite_sonuc` tablosundan çekilir."
-    )
+    kategori_etl = _normalize_kategori(kategori_etl_ui)
 
-    df_etl = load_etl_kalite_for_period(kategori, int(yil), int(ay))
+    df_etl = load_etl_kalite_for_period(kategori_etl, int(yil_etl), int(ay_etl))
 
     if df_etl.empty:
-        st.info(
-            f"{kategori} / {yil}-{int(ay):02d} için etl_kalite_sonuc kaydı bulunamadı. "
-            "Bu ya hiç hata olmadığı, ya da ETL'nin bu ay için çalışmadığı anlamına gelir."
-        )
+        st.info("etl_kalite_sonuc kaydı bulunamadı. (Hiç issue yok ya da ETL o dönem çalışmadı.)")
     else:
-        sev_counts = df_etl["seviye"].value_counts()
+        sev_counts = df_etl["seviye"].value_counts() if "seviye" in df_etl.columns else pd.Series(dtype=int)
         col_k1, col_k2, col_k3 = st.columns(3)
         with col_k1:
-            st.metric("Toplam kayıt", len(df_etl))
+            st.metric("Toplam kayıt", int(len(df_etl)))
         with col_k2:
             st.metric("FATAL", int(sev_counts.get("FATAL", 0)))
         with col_k3:
             st.metric("WARN", int(sev_counts.get("WARN", 0)))
 
-        st.subheader("ETL Validation Filtreleri")
+        st.subheader("Filtreler")
         col_ek1, col_ek2, col_ek3 = st.columns(3)
 
         with col_ek1:
@@ -546,7 +634,7 @@ def main():
 
         with col_ek2:
             rule_opts = sorted(df_etl["kural_kodu"].dropna().unique()) if "kural_kodu" in df_etl.columns else []
-            rule_sel = st.multiselect("Kural Kodu", options=rule_opts, default=rule_sel if (rule_sel := rule_opts) else [])
+            rule_sel = st.multiselect("Kural Kodu", options=rule_opts, default=rule_opts)
 
         with col_ek3:
             if "kurum_adi" in df_etl.columns:
@@ -575,15 +663,10 @@ def main():
         excel_etl, name_etl, mime_etl = df_to_excel_download(
             df_etl_f,
             sheet_name="ETL_Validation",
-            file_name=f"etl_validation_{kategori}_{yil}_{int(ay):02d}.xlsx",
+            file_name=f"etl_validation_{(kategori_etl or 'TUMU')}_{yil_etl}_{int(ay_etl):02d}.xlsx",
         )
         if excel_etl:
-            st.download_button(
-                "ETL temel validation sonuçlarını Excel olarak indir",
-                data=excel_etl,
-                file_name=name_etl,
-                mime=mime_etl,
-            )
+            st.download_button("ETL validation sonuçlarını Excel indir", data=excel_etl, file_name=name_etl, mime=mime_etl)
 
 
 if __name__ == "__main__":
